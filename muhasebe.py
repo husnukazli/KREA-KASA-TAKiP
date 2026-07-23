@@ -199,13 +199,12 @@ if st.session_state["role"] == "admin":
     # 4. PERSONEL İSTATİSTİKLERİ
     with admin_tab4:
         st.markdown("### 📈 Kullanıcı Bazlı İşlem İstatistikleri")
-        if all_users and tum_islemler:
+        if all_users and 'tum_islemler' in locals() and tum_islemler:
             stat_user = st.selectbox("İstatistikleri görmek için kullanıcı seçin:", [u.get('ad_soyad', u['email']) for u in all_users], key="stat_user_sel")
             user_islemleri = [i for i in tum_islemler if i.get("isleyen_kisi") == stat_user]
             
             if user_islemleri:
                 st.success(f"Toplam {len(user_islemleri)} adet işlem kaydı bulundu.")
-                # Tür bazlı sayım ve tutar
                 tur_ozet = {}
                 for ui in user_islemleri:
                     turu = ui["islem_turu"]
@@ -220,7 +219,7 @@ if st.session_state["role"] == "admin":
                 
                 for tur, detay in tur_ozet.items():
                     tutar_str = ", ".join([f"{val:,.2f} {curr}" for curr, val in detay["tutar"].items()])
-                    st.write(- **{tur}**: {detay['adet']} adet | Toplam Tutar: {tutar_str})
+                    st.write(f"- **{tur}**: {detay['adet']} adet | Toplam Tutar: {tutar_str}")
             else:
                 st.info("Bu kullanıcının henüz sisteme işlenmiş bir kaydı yok.")
         else:
@@ -238,11 +237,6 @@ with tab_yeni:
     if st.session_state["role"] in ["onaylı", "admin"]:
         st.markdown("### Yeni Finansal Kayıt Oluştur")
         
-        # State tabanlı form temizliği kontrolü (Menüler kalır, tutar/açıklama/dosya sıfırlanır)
-        if "f_tutar" not in st.session_state: st.session_state["f_tutar"] = 0.0
-        if "f_belge_no" not in st.session_state: st.session_state["f_belge_no"] = ""
-        if "f_aciklama" not in st.session_state: st.session_state["f_aciklama"] = ""
-
         f_yon = st.radio("İşlem Yönü", ["Giriş (Gelir)", "Çıkış (Gider)"], horizontal=True, key="f_yon_sel")
         f_turu = st.selectbox("İşlem Türü", ["Fatura", "İrsaliye", "Tahsilat Makbuzu", "Fiş", "Dekont", "Sözleşme", "Diğer"], key="f_turu_sel")
         
@@ -278,7 +272,7 @@ with tab_yeni:
                         content_type = uploaded_file.type if uploaded_file.type else "application/octet-stream"
                         
                         # Storage Yükleme
-                        upload_res = supabase.storage.from_("belgeler").upload(
+                        supabase.storage.from_("belgeler").upload(
                             path=file_path, 
                             file=uploaded_file.getvalue(), 
                             file_options={"content_type": content_type}
@@ -287,7 +281,7 @@ with tab_yeni:
                         dosya_url = supabase.storage.from_("belgeler").get_public_url(file_path)
                         
                         # Veritabanına Kayıt
-                        db_res = supabase.table("islemler").insert({
+                        supabase.table("islemler").insert({
                             "islem_turu": f_turu,
                             "yon": f_yon,
                             "tutar": float(f_tutar),
@@ -360,10 +354,8 @@ with tab_gecmis:
                                         col_evet, col_hayir = st.columns(2)
                                         if col_evet.button("✅ Evet, Sil", key=f"yes_del_{islem['id']}"):
                                             try:
-                                                # Depodan dosyayı sil
                                                 if islem.get("dosya_path"):
                                                     supabase.storage.from_("belgeler").remove([islem["dosya_path"]])
-                                                # Veritabanından kaydı sil (Bu sayede kasa anında güncellenir)
                                                 supabase.table("islemler").delete().eq("id", islem['id']).execute()
                                                 st.success("Kayıt başarıyla silindi ve kasa güncellendi!")
                                                 st.session_state[confirm_key] = False
