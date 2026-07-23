@@ -192,9 +192,12 @@ with tab_yeni:
                 else:
                     with st.spinner("Sisteme işleniyor..."):
                         try:
-                            # Benzersiz dosya ismi oluşturma (üzerine yazmayı engeller)
+                            # Dosya ismindeki Türkçe karakter ve boşlukları temizleyelim
+                            guvenli_yon = "giris" if f_yon == "Giriş (Gelir)" else "cikis"
+                            guvenli_dosya_adi = uploaded_file.name.replace(" ", "_").replace("ş", "s").replace("ı", "i").replace("ğ", "g").replace("ç", "c").replace("ö", "o").replace("ü", "u")
+                            
                             zaman_damgasi = int(time.time())
-                            file_path = f"{f_yon}/{f_para_birimi}/{zaman_damgasi}_{uploaded_file.name}"
+                            file_path = f"{guvenli_yon}/{f_para_birimi}/{zaman_damgasi}_{guvenli_dosya_adi}"
                             
                             content_type = uploaded_file.type if uploaded_file.type else "application/octet-stream"
                             
@@ -206,7 +209,7 @@ with tab_yeni:
                             )
                             dosya_url = supabase.storage.from_("belgeler").get_public_url(file_path)
                             
-                            # Veritabanına Kaydetme
+                            # Veritabanına Kaydetme (Veritabanına temiz Türkçe haliyle kaydeder)
                             supabase.table("islemler").insert({
                                 "islem_turu": f_turu,
                                 "yon": f_yon,
@@ -273,10 +276,8 @@ with tab_gecmis:
                                 if st.session_state["role"] == "admin" or st.session_state["ad_soyad"] == islem['isleyen_kisi']:
                                     if st.button("🗑️ İptal/Sil", key=f"del_{islem['id']}"):
                                         try:
-                                            # Önce dosyayı depodan sil
                                             if islem.get("dosya_path"):
                                                 supabase.storage.from_("belgeler").remove([islem["dosya_path"]])
-                                            # Sonra veritabanından kaydı sil
                                             supabase.table("islemler").delete().eq("id", islem['id']).execute()
                                             st.rerun()
                                         except Exception as e:
