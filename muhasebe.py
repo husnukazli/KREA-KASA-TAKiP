@@ -112,6 +112,17 @@ st.title("💼 Şirket Kasa ve Belge Yönetimi")
 if st.session_state["role"] == "admin":
     st.warning("🛠️ **Yönetici Kontrol Paneli**")
     
+    # Global admin veri çekme
+    try:
+        tum_islemler = supabase.table("islemler").select("*").execute().data
+    except Exception:
+        tum_islemler = []
+        
+    try:
+        all_users = supabase.table("app_users").select("*").execute().data
+    except Exception:
+        all_users = []
+
     admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs([
         "📊 Güncel Kasa Durumu", 
         "⏳ Bekleyen Onaylar", 
@@ -123,8 +134,6 @@ if st.session_state["role"] == "admin":
     with admin_tab1:
         st.markdown("### 🏦 Genel Kasa Bakiyeleri")
         try:
-            tum_islemler = supabase.table("islemler").select("*").execute().data
-            
             kasa = {"TL": 0.0, "USD": 0.0, "EUR": 0.0}
             toplam_giren = {"TL": 0.0, "USD": 0.0, "EUR": 0.0}
             toplam_cikan = {"TL": 0.0, "USD": 0.0, "EUR": 0.0}
@@ -177,7 +186,6 @@ if st.session_state["role"] == "admin":
     # 3. SİSTEM KULLANICILARI VE PROFİL İNCELEME
     with admin_tab3:
         st.markdown("### 👥 Sistem Kullanıcıları Listesi")
-        all_users = supabase.table("app_users").select("*").execute().data
         if all_users:
             selected_user_email = st.selectbox("Profili incelenecek kullanıcıyı seçin:", [u["email"] for u in all_users])
             selected_u = next((u for u in all_users if u["email"] == selected_user_email), None)
@@ -199,7 +207,7 @@ if st.session_state["role"] == "admin":
     # 4. PERSONEL İSTATİSTİKLERİ
     with admin_tab4:
         st.markdown("### 📈 Kullanıcı Bazlı İşlem İstatistikleri")
-        if all_users and 'tum_islemler' in locals() and tum_islemler:
+        if all_users and tum_islemler:
             stat_user = st.selectbox("İstatistikleri görmek için kullanıcı seçin:", [u.get('ad_soyad', u['email']) for u in all_users], key="stat_user_sel")
             user_islemleri = [i for i in tum_islemler if i.get("isleyen_kisi") == stat_user]
             
@@ -303,7 +311,7 @@ with tab_yeni:
     elif st.session_state["role"] == "beklemede":
         st.info("⏳ Hesabınız henüz onaylanmadı. İşlem yapabilmek için yöneticinin onayını bekleyin.")
 
-# 2. İŞLEM GEÇMİŞİ VE SİLME (EMİN MİSİNİZ KORUMALI & KASA SENKRONİZASYONLU)
+# 2. İŞLEM GEÇMİŞİ VE GÜVENLİ SİLME AKIŞI
 with tab_gecmis:
     st.markdown("### İşlem Kayıtları Filtreleme ve Yönetimi")
     
@@ -322,51 +330,64 @@ with tab_gecmis:
             if s_turu != "Tümü": query = query.eq("islem_turu", s_turu)
             if s_pb != "Tümü": query = query.eq("para_birimi", s_pb)
             
-            islemler = query.execute().data
-            
-            if not islemler:
-                st.warning("Bu filtrelere uygun kayıt bulunamadı.")
-            else:
-                st.success(f"{len(islemler)} adet işlem listelendi.")
+            st.session_state["liste_islemler"] = query.execute().data
+
+    islemler = st.session_state.get("liste_islemler", [])
+
+    if not islemler:
+        st.info("Henüz liste getirilmedi veya filtrelere uygun kayıt yok. Yukarıdaki butona tıklayarak listeleyebilirsiniz.")
+    else:
+        st.success(f"{len(islemler)} adet işlem listelendi.")
+        
+        if "active_delete_id" not in st.session_state:
+            st.session_state["active_delete_id"] = None
+
+        for islem in islemler:
+            with st.container():
+                renk = "🟢" if islem['yon'] == "Giriş (Gelir)" else "🔴"
                 
-                for islem in islemler:
-                    with st.container():
-                        renk = "🟢" if islem['yon'] == "Giriş (Gelir)" else "🔴"
+                c1, c2, c3 = st.columns([5, 3, 2])
+                c1.markdown(f"**{renk} {islem['islem_turu']}** ({islem['odeme_yontemi']}) <br><small>Açıklama: {islem['aciklama']}<br>İşleyen: {islem['isleyen_kisi']} | Belge No: {islem.get('belge_no','-')}</small>", unsafe_allow_html=True)
+                c2.markdown(f"<h3 style='margin:0;'>{islem['tutar']:,.2f} {islem['para_birimi']}</h3>", unsafe_allow_html=True)
+                
+                if st.session_state["role"] in ["onaylı", "admin"]:
+                    with c3:
+                        st.markdown(f"[👁️ İncele/İndir]({islem['dosya_url']})", unsafe_allow_html=True)
                         
-                        c1, c2, c3 = st.columns([5, 3, 2])
-                        c1.markdown(f"**{renk} {islem['islem_turu']}** ({islem['odeme_yontemi']}) <br><small>Açıklama: {islem['aciklama']}<br>İşleyen: {islem['isleyen_kisi']} | Belge No: {islem.get('belge_no','-')}</small>", unsafe_allow_html=True)
-                        c2.markdown(f"<h3 style='margin:0;'>{islem['tutar']:,.2f} {islem['para_birimi']}</h3>", unsafe_allow_html=True)
-                        
-                        if st.session_state["role"] in ["onaylı", "admin"]:
-                            with c3:
-                                st.markdown(f"[👁️ İncele/İndir]({islem['dosya_url']})", unsafe_allow_html=True)
-                                
-                                # Silme yetkisi (Admin veya kaydı giren kişi)
-                                if st.session_state["role"] == "admin" or st.session_state["ad_soyad"] == islem['isleyen_kisi']:
-                                    del_key = f"del_btn_{islem['id']}"
-                                    confirm_key = f"confirm_box_{islem['id']}"
-                                    
-                                    if st.button("🗑️ Sil", key=del_key):
-                                        st.session_state[confirm_key] = True
+                        # Silme yetkisi (Admin veya kaydı giren kişi)
+                        if st.session_state["role"] == "admin" or st.session_state["ad_soyad"] == islem['isleyen_kisi']:
+                            
+                            # Eğer bu satır için silme tetiklendiyse uyarı ve onay butonunu göster
+                            if st.session_state["active_delete_id"] == islem['id']:
+                                st.warning("⚠️ Bu kayıt kasadan düşülecek ve kalıcı olarak silinecek.")
+                                col_evet, col_hayir = st.columns(2)
+                                if col_evet.button("✅ Evet, Uygula ve Sil", key=f"exec_del_{islem['id']}"):
+                                    try:
+                                        # 1. Storage'dan dosyayı sil
+                                        if islem.get("dosya_path"):
+                                            supabase.storage.from_("belgeler").remove([islem["dosya_path"]])
                                         
-                                    if st.session_state.get(confirm_key, False):
-                                        st.warning("⚠️ Bu kayıt kalıcı olarak silinecek ve kasadan düşülecek. Emin misiniz?")
-                                        col_evet, col_hayir = st.columns(2)
-                                        if col_evet.button("✅ Evet, Sil", key=f"yes_del_{islem['id']}"):
-                                            try:
-                                                if islem.get("dosya_path"):
-                                                    supabase.storage.from_("belgeler").remove([islem["dosya_path"]])
-                                                supabase.table("islemler").delete().eq("id", islem['id']).execute()
-                                                st.success("Kayıt başarıyla silindi ve kasa güncellendi!")
-                                                st.session_state[confirm_key] = False
-                                                time.sleep(1)
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"Silme hatası: {e}")
-                                        if col_hayir.button("❌ Vazgeç", key=f"no_del_{islem['id']}"):
-                                            st.session_state[confirm_key] = False
-                                            st.rerun()
-                        st.divider()
+                                        # 2. Veritabanından kaydı sil
+                                        supabase.table("islemler").delete().eq("id", islem['id']).execute()
+                                        
+                                        # 3. Listeyi anında güncelle ve hafızadan uçur
+                                        st.session_state["liste_islemler"] = [i for i in st.session_state["liste_islemler"] if i['id'] != islem['id']]
+                                        st.session_state["active_delete_id"] = None
+                                        
+                                        st.success("✅ Kayıt başarıyla silindi ve kasa güncellendi!")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Silme hatası: {e}")
+                                        
+                                if col_hayir.button("❌ Vazgeç", key=f"cancel_del_{islem['id']}"):
+                                    st.session_state["active_delete_id"] = None
+                                    st.rerun()
+                            else:
+                                if st.button("🗑️ Sil", key=f"init_del_{islem['id']}"):
+                                    st.session_state["active_delete_id"] = islem['id']
+                                    st.rerun()
+                st.divider()
 
 # 3. PROFİL VE ŞİFRE DEĞİŞTİRME SEKMESİ
 with tab_profil:
