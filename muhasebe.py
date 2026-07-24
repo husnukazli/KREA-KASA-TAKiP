@@ -74,21 +74,7 @@ if not st.session_state["logged_in"]:
                     st.error(f"Kayıt hatası: {e}")
             else:
                 st.error("⚠️ Lütfen tüm zorunlu alanları doldurun.")
-
-    with st.expander("🛡️ Yönetici (Admin) Girişi"):
-        admin_pass = st.text_input("Yönetici Şifresi", type="password", key="admin_pass")
-        if st.button("Yönetici Olarak Gir"):
-            if admin_pass == "admin123": 
-                st.session_state.update({
-                    "logged_in": True, 
-                    "ad_soyad": "Sistem Yöneticisi", 
-                    "email": "admin", 
-                    "role": "admin",
-                    "user_id": "admin_id"
-                })
-                st.rerun()
-            else:
-                 st.error("⚠️ Hatalı yönetici şifresi!")
+                
     st.stop()
 
 # ==========================================
@@ -97,7 +83,7 @@ if not st.session_state["logged_in"]:
 with st.sidebar:
     st.write(f"👤 **{st.session_state['ad_soyad']}**")
     role_color = "🟢" if st.session_state['role'] in ['onaylı', 'admin'] else "🟠"
-    display_role = "Onaylı Kullanıcı" if st.session_state['role'] == "onaylı" else "Beklemede" if st.session_state['role'] == "beklemede" else "Yönetici"
+    display_role = "Yönetici" if st.session_state['role'] == "admin" else "Onaylı Kullanıcı" if st.session_state['role'] == "onaylı" else "Beklemede"
     st.write(f"🔑 Yetki: {role_color} {display_role}")
     
     if st.button("🚪 Çıkış Yap", use_container_width=True):
@@ -112,7 +98,6 @@ st.title("💼 Şirket Kasa ve Belge Yönetimi")
 if st.session_state["role"] == "admin":
     st.warning("🛠️ **Yönetici Kontrol Paneli**")
     
-    # Global admin veri çekme
     try:
         tum_islemler = supabase.table("islemler").select("*").execute().data
     except Exception:
@@ -240,30 +225,48 @@ if st.session_state["role"] == "admin":
 # ==========================================
 tab_yeni, tab_gecmis, tab_profil = st.tabs(["💸 Yeni İşlem & Belge Ekle", "🧾 İşlem Geçmişi", "⚙️ Profil & Şifre Bilgileri"])
 
-# 1. YENİ İŞLEM EKLEME SEKMESİ
+# 1. YENİ İŞLEM EKLEME SEKMESİ (KESİN FORM TEMİZLİĞİ VE SIFIRLAMA BUTONLU)
 with tab_yeni:
     if st.session_state["role"] in ["onaylı", "admin"]:
         st.markdown("### Yeni Finansal Kayıt Oluştur")
         
-        f_yon = st.radio("İşlem Yönü", ["Giriş (Gelir)", "Çıkış (Gider)"], horizontal=True, key="f_yon_sel")
-        f_turu = st.selectbox("İşlem Türü", ["Fatura", "İrsaliye", "Tahsilat Makbuzu", "Fiş", "Dekont", "Sözleşme", "Diğer"], key="f_turu_sel")
+        # Form alanları için unique sayfa form sayaç mekanizması (Formu sıfırlamak için seed artırılır)
+        if "form_gen_id" not in st.session_state:
+            st.session_state["form_gen_id"] = 0
+
+        fid = st.session_state["form_gen_id"]
+
+        f_yon = st.radio("İşlem Yönü", ["Giriş (Gelir)", "Çıkış (Gider)"], horizontal=True, key=f"f_yon_{fid}")
+        f_turu = st.selectbox("İşlem Türü", ["Fatura", "İrsaliye", "Tahsilat Makbuzu", "Fiş", "Dekont", "Sözleşme", "Diğer"], key=f"f_turu_{fid}")
         
         c1, c2 = st.columns(2)
         with c1:
-            f_tutar = st.number_input("Tutar (Rakam ile)", min_value=0.0, format="%.2f", step=10.0, key="f_tutar_input")
-            f_para_birimi = st.selectbox("Para Birimi", ["TL", "USD", "EUR"], key="f_pb_sel")
+            f_tutar = st.number_input("Tutar (Rakam ile)", min_value=0.0, format="%.2f", step=10.0, key=f"f_tutar_{fid}")
+            f_para_birimi = st.selectbox("Para Birimi", ["TL", "USD", "EUR"], key=f"f_pb_{fid}")
         with c2:
-            f_odeme_yontemi = st.selectbox("Ödeme Yöntemi", ["Nakit", "Kredi Kartı", "Çek", "Senet", "Banka Havalesi/EFT"], key="f_odeme_sel")
-            f_belge_no = st.text_input("Belge/Fatura No (İsteğe Bağlı)", key="f_belge_input")
+            f_odeme_yontemi = st.selectbox("Ödeme Yöntemi", ["Nakit", "Kredi Kartı", "Çek", "Senet", "Banka Havalesi/EFT"], key=f"f_odeme_{fid}")
+            f_belge_no = st.text_input("Belge/Fatura No (İsteğe Bağlı)", key=f"f_belge_{fid}")
             
-        f_aciklama = st.text_area("Açıklama (Firma adı, İşlem detayı vs.)", key="f_aciklama_input")
+        f_aciklama = st.text_area("Açıklama (Firma adı, İşlem detayı vs.)", key=f"f_aciklama_{fid}")
             
-        uploaded_file = st.file_uploader("Belge/Fotoğraf Yükle", type=["pdf", "jpg", "png", "jpeg"])
+        uploaded_file = st.file_uploader("Belge/Fotoğraf Yükle", type=["pdf", "jpg", "png", "jpeg"], key=f"f_file_{fid}")
         
         if uploaded_file is not None:
-            st.success("✅ Belge başarıyla yüklendi. Şimdi kaydı tamamlayabilirsiniz.")
+            st.success("✅ Belge başarıyla eklendi. Şimdi kaydı tamamlayabilirsiniz.")
 
-        if st.button("💾 Kaydı Tamamla ve Kasaya İşle", use_container_width=True):
+        col_islem1, col_islem2 = st.columns([3, 1])
+        
+        with col_islem1:
+            kaydet_basildi = st.button("💾 Kaydı Tamamla ve Kasaya İşle", use_container_width=True)
+            
+        with col_islem2:
+            temizle_basildi = st.button("🧹 Formu Temizle", use_container_width=True)
+
+        if temizle_basildi:
+            st.session_state["form_gen_id"] += 1
+            st.rerun()
+
+        if kaydet_basildi:
             if f_tutar <= 0:
                 st.error("⚠️ Lütfen 0'dan büyük geçerli bir tutar giriniz!")
             elif not uploaded_file:
@@ -302,7 +305,11 @@ with tab_yeni:
                             "isleyen_kisi": st.session_state['ad_soyad']
                         }).execute()
                         
-                        st.success("✅ İşlem başarıyla kaydedildi ve kasa güncellendi!")
+                        st.success("✅ İşlem başarıyla kaydedildi ve kasa güncellendi! Form sıfırlanıyor...")
+                        
+                        # Formu ID değiştirerek tamamen sıfırdan oluşturacak şekilde yeniliyoruz
+                        st.session_state["form_gen_id"] += 1
+                        
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
@@ -357,20 +364,16 @@ with tab_gecmis:
                         # Silme yetkisi (Admin veya kaydı giren kişi)
                         if st.session_state["role"] == "admin" or st.session_state["ad_soyad"] == islem['isleyen_kisi']:
                             
-                            # Eğer bu satır için silme tetiklendiyse uyarı ve onay butonunu göster
                             if st.session_state["active_delete_id"] == islem['id']:
                                 st.warning("⚠️ Bu kayıt kasadan düşülecek ve kalıcı olarak silinecek.")
                                 col_evet, col_hayir = st.columns(2)
                                 if col_evet.button("✅ Evet, Uygula ve Sil", key=f"exec_del_{islem['id']}"):
                                     try:
-                                        # 1. Storage'dan dosyayı sil
                                         if islem.get("dosya_path"):
                                             supabase.storage.from_("belgeler").remove([islem["dosya_path"]])
                                         
-                                        # 2. Veritabanından kaydı sil
                                         supabase.table("islemler").delete().eq("id", islem['id']).execute()
                                         
-                                        # 3. Listeyi anında güncelle ve hafızadan uçur
                                         st.session_state["liste_islemler"] = [i for i in st.session_state["liste_islemler"] if i['id'] != islem['id']]
                                         st.session_state["active_delete_id"] = None
                                         
@@ -391,7 +394,7 @@ with tab_gecmis:
 
 # 3. PROFİL VE ŞİFRE DEĞİŞTİRME SEKMESİ
 with tab_profil:
-    st.markdown("### ⚙️ Kullanıcı Profili ve Şifre Yönetimi")
+    st.markdown("### ⚙️ Profil ve Şifre Yönetimi")
     try:
         user_data_res = supabase.table("app_users").select("*").eq("email", st.session_state["email"]).execute()
         if user_data_res.data:
@@ -424,7 +427,7 @@ with tab_profil:
                         
                     supabase.table("app_users").update(update_payload).eq("email", st.session_state["email"]).execute()
                     st.session_state["ad_soyad"] = p_ad
-                    st.success("✅ Profil bilgileriniz başarıyla güncellendi!")
+                    st.success("✅ Profil bilgileriniz ve şifreniz başarıyla güncellendi!")
                     time.sleep(1)
                     st.rerun()
     except Exception as e:
