@@ -1,8 +1,9 @@
 import streamlit as st
 import hashlib
 import time
-from supabase import create_client, Client
+import random
 import pandas as pd
+from supabase import create_client, Client
 
 # --- SUPABASE BAĞLANTISI ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -185,7 +186,6 @@ if secili_menu == "Cari Kart Tanımları":
                 cariler_res = supabase.table("cariler").select("*").order("created_at", desc=True).execute()
                 cariler_data = cariler_res.data
                 if cariler_data:
-                    # Gelişmiş tablo görünümü için Pandas kullanımı
                     df_cariler = pd.DataFrame(cariler_data)
                     df_gosterim = df_cariler[["cari_kodu", "unvan", "doviz_tipi", "vkn_tckn", "telefon", "email"]]
                     df_gosterim.columns = ["Kodu", "Ünvan / İsim", "Döviz", "VKN/TCKN", "Telefon", "E-Posta"]
@@ -205,7 +205,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
     else:
         st.header("Cari Hareket Föyü (Ekstre)")
         
-        # 1. Cari Seçimi
         cariler_res = supabase.table("cariler").select("id, cari_kodu, unvan, doviz_tipi").order("unvan").execute()
         cariler_listesi = cariler_res.data
         
@@ -222,7 +221,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 
                 st.write("---")
                 
-                # 2. Hareket Verilerini Çekme ve Bakiye Hesaplama
                 islemler_res = supabase.table("islemler").select("*").eq("cari_id", cari_id).order("created_at", desc=False).execute()
                 islemler = islemler_res.data
                 
@@ -243,7 +241,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         
                     bakiye = toplam_borc - toplam_alacak
                     
-                    # Resmi gösterim için format
                     ekstre_listesi.append({
                         "Tarih": islem["created_at"][:16].replace("T", " "),
                         "Evrak Tipi": islem["evrak_tipi"],
@@ -260,14 +257,12 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 guncel_bakiye = toplam_borc - toplam_alacak
                 bakiye_durumu = "Borçlu" if guncel_bakiye > 0 else "Alacaklı" if guncel_bakiye < 0 else "Kapandı"
                 
-                # Bakiye Özet Kartları
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Toplam Borç", f"{toplam_borc:,.2f} {cari_doviz}")
                 m2.metric("Toplam Alacak", f"{toplam_alacak:,.2f} {cari_doviz}")
                 m3.metric("Güncel Bakiye", f"{abs(guncel_bakiye):,.2f} {cari_doviz}")
                 m4.metric("Bakiye Durumu", bakiye_durumu)
                 
-                # Fiş Giriş Paneli
                 with st.expander("➕ Yeni Fiş / İşlem Girişi Yap"):
                     if "form_seed" not in st.session_state:
                         st.session_state["form_seed"] = 0
@@ -323,10 +318,8 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         st.session_state["form_seed"] += 1
                         st.rerun()
                 
-                # Ekstre Tablosu
                 st.write("#### Hareket Dökümü (Yeniden Eskiye)")
                 if ekstre_listesi:
-                    # En yeni işlemin üstte görünmesi için listeyi ters çeviriyoruz
                     ekstre_listesi.reverse()
                     df_ekstre = pd.DataFrame(ekstre_listesi)
                     st.dataframe(df_ekstre, use_container_width=True, hide_index=True)
@@ -384,10 +377,10 @@ elif secili_menu == "Profil ve Ayarlar":
 elif secili_menu == "Yönetim Paneli (Admin)":
     st.header("Sistem Yönetim Paneli")
     
-    tab_ozet, tab_kullanici = st.tabs(["Mali Özet (Döviz Bazlı)", "Personel ve Yetki Yönetimi"])
+    # 3. Sekme eklendi (Test Araçları)
+    tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Personel ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
     
     with tab_ozet:
-        # Tüm cari ve işlemleri birleştirerek genel bakiye bulma
         cariler_db = supabase.table("cariler").select("id, doviz_tipi").execute().data
         islemler_db = supabase.table("islemler").select("cari_id, islem_yonu, tutar").execute().data
         
@@ -401,9 +394,9 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     d_tip = cari_doviz_map[c_id]
                     t = float(ism["tutar"])
                     if ism["islem_yonu"] == "Borç":
-                        ozet[d_tip] += t  # Piyasadan Alacağımız
+                        ozet[d_tip] += t  
                     else:
-                        ozet[d_tip] -= t  # Piyasaya Borcumuz
+                        ozet[d_tip] -= t  
                         
             st.write("#### Genel Şirket Bakiyesi (Müşteri/Tedarikçi Net Durum)")
             st.caption("Pozitif değerler piyasadan toplam alacağınızı, negatif değerler piyasaya olan toplam borcunuzu temsil eder.")
@@ -416,7 +409,6 @@ elif secili_menu == "Yönetim Paneli (Admin)":
             st.info("Hesaplanacak yeterli veri bulunamadı.")
 
     with tab_kullanici:
-        # Onay bekleyenler
         bekleyenler = supabase.table("app_users").select("*").eq("role", "beklemede").execute().data
         if bekleyenler:
             st.warning("Onay Bekleyen Personeller")
@@ -443,4 +435,58 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                 }).eq("id", secili_u["id"]).execute()
                 st.success("Şifre sıfırlandı!")
                 time.sleep(1.5)
+                st.rerun()
+                
+    # YENİ TEST MODU SEKMESİ
+    with tab_test:
+        st.write("#### 🧪 Otomatik Veri Simülasyonu")
+        st.write("Geliştirme sürecinde ekranların (Cari Mizanı, Tablolar vb.) nasıl göründüğünü test edebilmek için sisteme tek tıkla sanal veriler yükleyebilirsiniz.")
+        
+        if st.button("🚀 Sistemi Test Verileriyle Doldur", type="secondary"):
+            with st.spinner("Sanal Kullanıcılar, Cariler ve İşlemler Üretiliyor..."):
+                
+                # 1. Sanal Kullanıcı (Personel) Üretimi
+                dummy_users = [
+                    {"ad_soyad": "Test Personel A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
+                    {"ad_soyad": "Test Personel B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
+                ]
+                for du in dummy_users:
+                    try:
+                        supabase.table("app_users").insert(du).execute()
+                    except:
+                        pass # Eğer daha önce eklendiyse benzersizlik (unique) hatasını yoksay
+                
+                # 2. Sanal Cari Kart Üretimi
+                dummy_cariler = [
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Mavi Bilişim Teknolojileri A.Ş.", "doviz_tipi": "TL", "vergi_dairesi": "Bornova", "vkn_tckn": "1111111111", "olusturan": "Sistem Admin"},
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Ege Gıda Pazarlama Ltd.", "doviz_tipi": "USD", "vergi_dairesi": "Karşıyaka", "vkn_tckn": "2222222222", "olusturan": "Sistem Admin"},
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Demir İnşaat ve Malz. Sanayi", "doviz_tipi": "EUR", "vergi_dairesi": "Konak", "vkn_tckn": "3333333333", "olusturan": "Sistem Admin"}
+                ]
+                for dc in dummy_cariler:
+                    try:
+                        supabase.table("cariler").insert(dc).execute()
+                    except:
+                        pass
+                
+                # Eklenen carilerin ID'lerini çek
+                cariler_db_test = supabase.table("cariler").select("id").execute().data
+                
+                # 3. Sanal İşlem (Fiş) Üretimi
+                if cariler_db_test:
+                    evrak_tipleri = ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT"]
+                    yonler = ["Borç", "Alacak"]
+                    for _ in range(10): # Toplam 10 adet rastgele işlem
+                        secili_c_id = random.choice(cariler_db_test)["id"]
+                        supabase.table("islemler").insert({
+                            "cari_id": secili_c_id,
+                            "evrak_tipi": random.choice(evrak_tipleri),
+                            "islem_yonu": random.choice(yonler),
+                            "tutar": round(random.uniform(1000, 25000), 2),
+                            "belge_no": f"EVR-{random.randint(10000, 99999)}",
+                            "aciklama": "Sistem tarafından otomatik üretilen test fişi.",
+                            "isleyen_kisi": "Test Robotu"
+                        }).execute()
+                
+                st.success("✅ Test verileri (Personeller, Cari Kartlar ve İşlemler) başarıyla oluşturuldu! Lütfen Cari Hareketler sayfasına gidip inceleyin.")
+                time.sleep(3)
                 st.rerun()
