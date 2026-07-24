@@ -31,7 +31,6 @@ if not st.session_state["logged_in"]:
         login_email = st.text_input("E-posta Adresi", key="log_email")
         login_pass = st.text_input("Şifre", type="password", key="log_pass")
         if st.button("Giriş Yap", use_container_width=True):
-            # Otomatik boşluk temizleme ve küçük harfe çevirme filtresi
             clean_email = login_email.strip().lower()
             clean_pass = login_pass.strip()
             
@@ -61,7 +60,6 @@ if not st.session_state["logged_in"]:
         reg_email = st.text_input("E-posta Adresi", key="reg_email")
         reg_pass = st.text_input("Şifre Belirle", type="password", key="reg_pass")
         if st.button("Kayıt Ol", use_container_width=True):
-            # Otomatik boşluk temizleme ve küçük harfe çevirme filtresi
             clean_reg_email = reg_email.strip().lower()
             clean_reg_pass = reg_pass.strip()
             clean_reg_ad = reg_ad_soyad.strip()
@@ -84,6 +82,21 @@ if not st.session_state["logged_in"]:
             else:
                 st.error("⚠️ Lütfen tüm zorunlu alanları doldurun.")
                 
+    # YÖNETİCİ GİRİŞİ GERİ EKLENDİ
+    with st.expander("🛡️ Yönetici (Admin) Girişi"):
+        admin_pass = st.text_input("Yönetici Şifresi", type="password", key="admin_pass")
+        if st.button("Yönetici Olarak Gir"):
+            if admin_pass == "admin123": 
+                st.session_state.update({
+                    "logged_in": True, 
+                    "ad_soyad": "Sistem Yöneticisi", 
+                    "email": "admin", 
+                    "role": "admin",
+                    "user_id": "admin_id"
+                })
+                st.rerun()
+            else:
+                 st.error("⚠️ Hatalı yönetici şifresi!")
     st.stop()
 
 # ==========================================
