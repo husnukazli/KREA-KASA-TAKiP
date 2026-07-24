@@ -8,8 +8,9 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Türkçe karakterleri hatasız şifrelemesi için UTF-8 kilidi eklendi
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Kasa & Belge Takip", page_icon="💰", layout="wide")
@@ -215,7 +216,6 @@ if st.session_state["role"] == "admin":
                 
                 if st.button(f"🔑 {selected_u.get('ad_soyad', 'Bu kullanıcı')} için Şifreyi '1234' Olarak Sıfırla"):
                     try:
-                        # Kullanıcının e-postasını da veritabanında temizliyoruz ki giriş garantilensin
                         tam_temiz_email = selected_u["email"].strip().lower()
                         
                         supabase.table("app_users").update({
@@ -223,8 +223,8 @@ if st.session_state["role"] == "admin":
                             "email": tam_temiz_email
                         }).eq("id", selected_u["id"]).execute()
                         
-                        st.success(f"✅ Başarılı! Kullanıcının şifresi **1234** yapıldı. E-posta adresi hatalara karşı temizlendi ({tam_temiz_email}). Kullanıcı '1234' şifresiyle giriş yapabilir.")
-                        time.sleep(3)
+                        st.success(f"✅ Başarılı! Kullanıcının şifresi **1234** yapıldı.")
+                        time.sleep(2)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Sıfırlama hatası: {e}")
@@ -268,7 +268,7 @@ if st.session_state["role"] == "admin":
 # ==========================================
 tab_yeni, tab_gecmis, tab_profil = st.tabs(["💸 Yeni İşlem & Belge Ekle", "🧾 İşlem Geçmişi", "⚙️ Profil & Şifre Bilgileri"])
 
-# 1. YENİ İŞLEM EKLEME SEKMESİ (KESİN FORM TEMİZLİĞİ VE SIFIRLAMA BUTONLU)
+# 1. YENİ İŞLEM EKLEME SEKMESİ
 with tab_yeni:
     if st.session_state["role"] in ["onaylı", "admin"]:
         st.markdown("### Yeni Finansal Kayıt Oluştur")
@@ -324,7 +324,6 @@ with tab_yeni:
                         
                         content_type = uploaded_file.type if uploaded_file.type else "application/octet-stream"
                         
-                        # Storage Yükleme
                         supabase.storage.from_("belgeler").upload(
                             path=file_path, 
                             file=uploaded_file.getvalue(), 
@@ -333,7 +332,6 @@ with tab_yeni:
                         
                         dosya_url = supabase.storage.from_("belgeler").get_public_url(file_path)
                         
-                        # Veritabanına Kayıt
                         supabase.table("islemler").insert({
                             "islem_turu": f_turu,
                             "yon": f_yon,
@@ -434,40 +432,51 @@ with tab_gecmis:
 # 3. PROFİL VE ŞİFRE DEĞİŞTİRME SEKMESİ
 with tab_profil:
     st.markdown("### ⚙️ Profil ve Şifre Yönetimi")
-    try:
-        user_data_res = supabase.table("app_users").select("*").eq("email", st.session_state["email"]).execute()
-        if user_data_res.data:
-            u_info = user_data_res.data[0]
-            
-            with st.form("profil_guncelleme_formu"):
-                st.subheader("Temel Bilgiler")
-                p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad", ""))
-                p_tel = st.text_input("Telefon Numarası", value=u_info.get("telefon", ""))
-                p_konum = st.text_input("Şirket Konum", value=u_info.get("konum", ""))
-                p_pozisyon = st.text_input("Pozisyon", value=u_info.get("pozisyon", ""))
-                p_birim = st.text_input("Birim", value=u_info.get("birim", ""))
+    
+    # Sabit (veritabanında olmayan) admin hesabı için profil ekranı uyarısı
+    if st.session_state["email"] == "admin":
+        st.info("Sabit Yönetici (Admin) hesabı profil ve şifre güncelleyemez. Veritabanındaki onaylı bir hesapla giriş yapınız.")
+    else:
+        try:
+            user_data_res = supabase.table("app_users").select("*").eq("email", st.session_state["email"]).execute()
+            if user_data_res.data:
+                u_info = user_data_res.data[0]
                 
-                st.divider()
-                st.subheader("Şifre Değiştirme (İsteğe Bağlı)")
-                p_yeni_sifre = st.text_input("Yeni Şifre (Değiştirmek istemiyorsanız boş bırakın)", type="password")
-                
-                profil_kaydet = st.form_submit_button("💾 Bilgileri Güncelle", use_container_width=True)
-                
-                if profil_kaydet:
-                    update_payload = {
-                        "ad_soyad": p_ad.strip(),
-                        "telefon": p_tel.strip(),
-                        "konum": p_konum.strip(),
-                        "pozisyon": p_pozisyon.strip(),
-                        "birim": p_birim.strip()
-                    }
-                    if p_yeni_sifre.strip():
-                        update_payload["password"] = hash_password(p_yeni_sifre.strip())
-                        
-                    supabase.table("app_users").update(update_payload).eq("email", st.session_state["email"]).execute()
-                    st.session_state["ad_soyad"] = p_ad.strip()
-                    st.success("✅ Profil bilgileriniz ve şifreniz başarıyla güncellendi!")
-                    time.sleep(1)
-                    st.rerun()
-    except Exception as e:
-        st.error(f"Profil bilgileri yüklenirken hata oluştu: {e}")
+                with st.form("profil_guncelleme_formu"):
+                    st.subheader("Temel Bilgiler")
+                    p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad", ""))
+                    p_tel = st.text_input("Telefon Numarası", value=u_info.get("telefon", ""))
+                    p_konum = st.text_input("Şirket Konum", value=u_info.get("konum", ""))
+                    p_pozisyon = st.text_input("Pozisyon", value=u_info.get("pozisyon", ""))
+                    p_birim = st.text_input("Birim", value=u_info.get("birim", ""))
+                    
+                    st.divider()
+                    st.subheader("Şifre Değiştirme (İsteğe Bağlı)")
+                    p_yeni_sifre = st.text_input("Yeni Şifre (Değiştirmek istemiyorsanız boş bırakın)", type="password")
+                    # Çift doğrulama alanı eklendi
+                    p_yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar)", type="password")
+                    
+                    profil_kaydet = st.form_submit_button("💾 Bilgileri Güncelle", use_container_width=True)
+                    
+                    if profil_kaydet:
+                        if p_yeni_sifre and p_yeni_sifre != p_yeni_sifre_tekrar:
+                            st.error("⚠️ Girdiğiniz yeni şifreler birbiriyle uyuşmuyor, lütfen tekrar deneyin!")
+                        else:
+                            update_payload = {
+                                "ad_soyad": p_ad.strip(),
+                                "telefon": p_tel.strip(),
+                                "konum": p_konum.strip(),
+                                "pozisyon": p_pozisyon.strip(),
+                                "birim": p_birim.strip()
+                            }
+                            if p_yeni_sifre.strip():
+                                update_payload["password"] = hash_password(p_yeni_sifre.strip())
+                                
+                            # ID üzerinden güvenli güncelleme
+                            supabase.table("app_users").update(update_payload).eq("id", st.session_state["user_id"]).execute()
+                            st.session_state["ad_soyad"] = p_ad.strip()
+                            st.success("✅ Profil bilgileriniz başarıyla güncellendi!")
+                            time.sleep(1.5)
+                            st.rerun()
+        except Exception as e:
+            st.error(f"Profil bilgileri yüklenirken hata oluştu: {e}")
