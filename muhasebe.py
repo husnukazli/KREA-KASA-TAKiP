@@ -82,7 +82,6 @@ if not st.session_state["logged_in"]:
             else:
                 st.error("⚠️ Lütfen tüm zorunlu alanları doldurun.")
                 
-    # YÖNETİCİ GİRİŞİ GERİ EKLENDİ
     with st.expander("🛡️ Yönetici (Admin) Girişi"):
         admin_pass = st.text_input("Yönetici Şifresi", type="password", key="admin_pass")
         if st.button("Yönetici Olarak Gir"):
@@ -190,7 +189,7 @@ if st.session_state["role"] == "admin":
         else:
             st.info("Onay bekleyen yeni kullanıcı yok.")
 
-    # 3. SİSTEM KULLANICILARI VE PROFİL İNCELEME
+    # 3. SİSTEM KULLANICILARI, PROFİL İNCELEME VE ŞİFRE SIFIRLAMA
     with admin_tab3:
         st.markdown("### 👥 Sistem Kullanıcıları Listesi")
         if all_users:
@@ -208,6 +207,28 @@ if st.session_state["role"] == "admin":
                     st.write(f"**Pozisyon:** {selected_u.get('pozisyon', 'Belirtilmemiş')}")
                     st.write(f"**Birim:** {selected_u.get('birim', 'Belirtilmemiş')}")
                     st.write(f"**Yetki Durumu:** {selected_u.get('role', '-')}")
+                
+                # --- YÖNETİCİ ŞİFRE SIFIRLAMA ALANI ---
+                st.divider()
+                st.markdown("#### 🚨 Yönetici İşlemleri (Şifre Sıfırlama)")
+                st.warning("Eğer kullanıcı şifresini unuttuğunu veya giremediğini söylüyorsa, aşağıdaki butona tıklayarak şifresini geçici olarak **1234** yapabilirsiniz.")
+                
+                if st.button(f"🔑 {selected_u.get('ad_soyad', 'Bu kullanıcı')} için Şifreyi '1234' Olarak Sıfırla"):
+                    try:
+                        # Kullanıcının e-postasını da veritabanında temizliyoruz ki giriş garantilensin
+                        tam_temiz_email = selected_u["email"].strip().lower()
+                        
+                        supabase.table("app_users").update({
+                            "password": hash_password("1234"),
+                            "email": tam_temiz_email
+                        }).eq("id", selected_u["id"]).execute()
+                        
+                        st.success(f"✅ Başarılı! Kullanıcının şifresi **1234** yapıldı. E-posta adresi hatalara karşı temizlendi ({tam_temiz_email}). Kullanıcı '1234' şifresiyle giriş yapabilir.")
+                        time.sleep(3)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sıfırlama hatası: {e}")
+
         else:
             st.info("Kayıtlı kullanıcı bulunamadı.")
 
@@ -252,7 +273,6 @@ with tab_yeni:
     if st.session_state["role"] in ["onaylı", "admin"]:
         st.markdown("### Yeni Finansal Kayıt Oluştur")
         
-        # Form alanları için unique sayfa form sayaç mekanizması (Formu sıfırlamak için seed artırılır)
         if "form_gen_id" not in st.session_state:
             st.session_state["form_gen_id"] = 0
 
@@ -329,9 +349,7 @@ with tab_yeni:
                         
                         st.success("✅ İşlem başarıyla kaydedildi ve kasa güncellendi! Form sıfırlanıyor...")
                         
-                        # Formu ID değiştirerek tamamen sıfırdan oluşturacak şekilde yeniliyoruz
                         st.session_state["form_gen_id"] += 1
-                        
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
@@ -383,7 +401,6 @@ with tab_gecmis:
                     with c3:
                         st.markdown(f"[👁️ İncele/İndir]({islem['dosya_url']})", unsafe_allow_html=True)
                         
-                        # Silme yetkisi (Admin veya kaydı giren kişi)
                         if st.session_state["role"] == "admin" or st.session_state["ad_soyad"] == islem['isleyen_kisi']:
                             
                             if st.session_state["active_delete_id"] == islem['id']:
@@ -437,7 +454,6 @@ with tab_profil:
                 profil_kaydet = st.form_submit_button("💾 Bilgileri Güncelle", use_container_width=True)
                 
                 if profil_kaydet:
-                    # Form verilerini de tıraşlayalım
                     update_payload = {
                         "ad_soyad": p_ad.strip(),
                         "telefon": p_tel.strip(),
