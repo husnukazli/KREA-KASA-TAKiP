@@ -31,15 +31,19 @@ if not st.session_state["logged_in"]:
         login_email = st.text_input("E-posta Adresi", key="log_email")
         login_pass = st.text_input("Şifre", type="password", key="log_pass")
         if st.button("Giriş Yap", use_container_width=True):
+            # Otomatik boşluk temizleme ve küçük harfe çevirme filtresi
+            clean_email = login_email.strip().lower()
+            clean_pass = login_pass.strip()
+            
             try:
-                response = supabase.table("app_users").select("*").eq("email", login_email).execute()
+                response = supabase.table("app_users").select("*").eq("email", clean_email).execute()
                 users = response.data
-                if users and users[0]["password"] == hash_password(login_pass):
+                if users and users[0]["password"] == hash_password(clean_pass):
                     u = users[0]
                     st.session_state.update({
                         "logged_in": True, 
-                        "email": login_email, 
-                        "ad_soyad": u.get("ad_soyad", login_email), 
+                        "email": clean_email, 
+                        "ad_soyad": u.get("ad_soyad", clean_email), 
                         "role": u["role"],
                         "user_id": u["id"]
                     })
@@ -57,16 +61,21 @@ if not st.session_state["logged_in"]:
         reg_email = st.text_input("E-posta Adresi", key="reg_email")
         reg_pass = st.text_input("Şifre Belirle", type="password", key="reg_pass")
         if st.button("Kayıt Ol", use_container_width=True):
-            if reg_email and reg_pass and reg_ad_soyad:
+            # Otomatik boşluk temizleme ve küçük harfe çevirme filtresi
+            clean_reg_email = reg_email.strip().lower()
+            clean_reg_pass = reg_pass.strip()
+            clean_reg_ad = reg_ad_soyad.strip()
+            
+            if clean_reg_email and clean_reg_pass and clean_reg_ad:
                 try:
-                    existing = supabase.table("app_users").select("*").eq("email", reg_email).execute()
+                    existing = supabase.table("app_users").select("*").eq("email", clean_reg_email).execute()
                     if existing.data:
                         st.warning("⚠️ Bu e-posta zaten kayıtlı!")
                     else:
                         supabase.table("app_users").insert({
-                            "ad_soyad": reg_ad_soyad, 
-                            "email": reg_email, 
-                            "password": hash_password(reg_pass), 
+                            "ad_soyad": clean_reg_ad, 
+                            "email": clean_reg_email, 
+                            "password": hash_password(clean_reg_pass), 
                             "role": "beklemede"
                         }).execute()
                         st.success("✅ Kayıt başarılı! Yönetici onayından sonra sisteme girebilirsiniz.")
@@ -415,18 +424,19 @@ with tab_profil:
                 profil_kaydet = st.form_submit_button("💾 Bilgileri Güncelle", use_container_width=True)
                 
                 if profil_kaydet:
+                    # Form verilerini de tıraşlayalım
                     update_payload = {
-                        "ad_soyad": p_ad,
-                        "telefon": p_tel,
-                        "konum": p_konum,
-                        "pozisyon": p_pozisyon,
-                        "birim": p_birim
+                        "ad_soyad": p_ad.strip(),
+                        "telefon": p_tel.strip(),
+                        "konum": p_konum.strip(),
+                        "pozisyon": p_pozisyon.strip(),
+                        "birim": p_birim.strip()
                     }
-                    if p_yeni_sifre:
-                        update_payload["password"] = hash_password(p_yeni_sifre)
+                    if p_yeni_sifre.strip():
+                        update_payload["password"] = hash_password(p_yeni_sifre.strip())
                         
                     supabase.table("app_users").update(update_payload).eq("email", st.session_state["email"]).execute()
-                    st.session_state["ad_soyad"] = p_ad
+                    st.session_state["ad_soyad"] = p_ad.strip()
                     st.success("✅ Profil bilgileriniz ve şifreniz başarıyla güncellendi!")
                     time.sleep(1)
                     st.rerun()
