@@ -118,7 +118,6 @@ with st.sidebar:
     st.caption(f"Yetki Grubu: {display_role}")
     st.divider()
     
-    # Modern Navigasyon
     menu_secenekleri = ["Cari Hareketler & Fişler", "Cari Kart Tanımları", "Profil ve Ayarlar"]
     if st.session_state["role"] == "admin":
         menu_secenekleri.insert(0, "Yönetim Paneli (Admin)")
@@ -189,7 +188,6 @@ if secili_menu == "Cari Kart Tanımları":
                     df_cariler = pd.DataFrame(cariler_data)
                     df_gosterim = df_cariler[["cari_kodu", "unvan", "doviz_tipi", "vkn_tckn", "telefon", "email"]]
                     df_gosterim.columns = ["Kodu", "Ünvan / İsim", "Döviz", "VKN/TCKN", "Telefon", "E-Posta"]
-                    
                     st.dataframe(df_gosterim, use_container_width=True, hide_index=True)
                 else:
                     st.info("Sistemde kayıtlı cari bulunmamaktadır.")
@@ -197,7 +195,7 @@ if secili_menu == "Cari Kart Tanımları":
                 st.error(f"Veri çekme hatası: {e}")
 
 # ==========================================
-# MENÜ 2: CARİ HAREKETLER & FİŞLER (MİZAN MANTIĞI)
+# MENÜ 2: CARİ HAREKETLER & FİŞLER
 # ==========================================
 elif secili_menu == "Cari Hareketler & Fişler":
     if st.session_state["role"] not in ["onaylı", "admin"]:
@@ -227,6 +225,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 toplam_borc = 0.0
                 toplam_alacak = 0.0
                 ekstre_listesi = []
+                evraksiz_islemler = [] # Sonradan belge yükleme için
                 
                 for islem in islemler:
                     tutar = float(islem["tutar"])
@@ -241,6 +240,10 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         
                     bakiye = toplam_borc - toplam_alacak
                     
+                    # Evrağı olmayan işlemleri listeye alıyoruz
+                    if not islem.get("dosya_url"):
+                        evraksiz_islemler.append(islem)
+                    
                     ekstre_listesi.append({
                         "Tarih": islem["created_at"][:16].replace("T", " "),
                         "Evrak Tipi": islem["evrak_tipi"],
@@ -251,7 +254,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         "Bakiye": f"{bakiye:,.2f}",
                         "Açıklama": islem.get("aciklama", ""),
                         "İşleyen": islem["isleyen_kisi"],
-                        "Dosya": "Var" if islem.get("dosya_url") else "Yok"
+                        "Belge": islem.get("dosya_url") # Link için gerçek URL
                     })
                 
                 guncel_bakiye = toplam_borc - toplam_alacak
@@ -263,6 +266,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 m3.metric("Güncel Bakiye", f"{abs(guncel_bakiye):,.2f} {cari_doviz}")
                 m4.metric("Bakiye Durumu", bakiye_durumu)
                 
+                # 1. YENİ FİŞ GİRİŞ PANELİ
                 with st.expander("➕ Yeni Fiş / İşlem Girişi Yap"):
                     if "form_seed" not in st.session_state:
                         st.session_state["form_seed"] = 0
@@ -271,7 +275,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                     c1, c2 = st.columns(2)
                     with c1:
                         f_evrak = st.selectbox("Evrak Tipi", ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT", "Devir/Açılış"], key=f"f_evrak_{fs}")
-                        f_yon = st.radio("İşlem Yönü (Cari Hesap İçin)", ["Borç", "Alacak"], horizontal=True, key=f"f_yon_{fs}", help="Satış yaptıysanız veya nakit verdiyseniz 'Borç'. Mal aldıysanız veya tahsilat yaptıysanız 'Alacak' seçin.")
+                        f_yon = st.radio("İşlem Yönü (Cari Hesap İçin)", ["Borç", "Alacak"], horizontal=True, key=f"f_yon_{fs}")
                     with c2:
                         f_tutar = st.number_input(f"Tutar ({cari_doviz})", min_value=0.0, step=10.0, format="%.2f", key=f"f_tutar_{fs}")
                         f_belge = st.text_input("Belge/Fatura No", key=f"f_belge_{fs}")
@@ -317,12 +321,60 @@ elif secili_menu == "Cari Hareketler & Fişler":
                     if col_temizle.button("Formu Temizle", use_container_width=True):
                         st.session_state["form_seed"] += 1
                         st.rerun()
+
+                # 2. EKSİK EVRAK YÜKLEME PANELİ (YENİ)
+                if evraksiz_islemler:
+                    with st.expander("📎 Eksik Evrak Yükle (Sonradan Belge Ekle)"):
+                        st.info("Aşağıdaki işlemler sisteme belgesiz olarak kaydedilmiş. İlgili işlemi seçip faturasını/dekontunu sonradan ekleyebilirsiniz.")
+                        
+                        evrak_opsiyonlari = {f"{e['created_at'][:10]} | {e['evrak_tipi']} | {e['islem_yonu']} {e['tutar']} {cari_doviz}": e for e in evraksiz_islemler}
+                        secili_eksik = st.selectbox("Belgesi Yüklenecek İşlemi Seçin:", ["Seçiniz..."] + list(evrak_opsiyonlari.keys()))
+                        
+                        if secili_eksik != "Seçiniz...":
+                            sonradan_dosya = st.file_uploader("Belgeyi Seçin", type=["pdf", "jpg", "png"], key="sonradan_upload")
+                            if st.button("Belgeyi İşleme Ekle", type="primary"):
+                                if sonradan_dosya:
+                                    with st.spinner("Belge yükleniyor ve işleme bağlanıyor..."):
+                                        safe_name = sonradan_dosya.name.replace(" ", "_")
+                                        hedef_islem_id = evrak_opsiyonlari[secili_eksik]["id"]
+                                        dosya_path = f"cariler/{cari_id}/sonradan_{int(time.time())}_{safe_name}"
+                                        
+                                        supabase.storage.from_("belgeler").upload(
+                                            path=dosya_path, 
+                                            file=sonradan_dosya.getvalue(), 
+                                            file_options={"content_type": sonradan_dosya.type or "application/octet-stream"}
+                                        )
+                                        dosya_url = supabase.storage.from_("belgeler").get_public_url(dosya_path)
+                                        
+                                        supabase.table("islemler").update({
+                                            "dosya_url": dosya_url,
+                                            "dosya_path": dosya_path
+                                        }).eq("id", hedef_islem_id).execute()
+                                        
+                                        st.success("Belge başarıyla işleme eklendi!")
+                                        time.sleep(1)
+                                        st.rerun()
+                                else:
+                                    st.error("Lütfen önce bir belge seçin.")
                 
+                # 3. TABLO (AKILLI LİNK SÜTUNU İLE)
                 st.write("#### Hareket Dökümü (Yeniden Eskiye)")
                 if ekstre_listesi:
                     ekstre_listesi.reverse()
                     df_ekstre = pd.DataFrame(ekstre_listesi)
-                    st.dataframe(df_ekstre, use_container_width=True, hide_index=True)
+                    
+                    # Dosya linkleri için özel kolon ayarı
+                    st.dataframe(
+                        df_ekstre, 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Belge": st.column_config.LinkColumn(
+                                "Belge (İncele)", 
+                                display_text="İncele" # Tüm linklerin üstünde 'İncele' yazacak
+                            )
+                        }
+                    )
                 else:
                     st.info("Bu cariye ait henüz bir finansal hareket bulunmamaktadır.")
 
@@ -377,7 +429,6 @@ elif secili_menu == "Profil ve Ayarlar":
 elif secili_menu == "Yönetim Paneli (Admin)":
     st.header("Sistem Yönetim Paneli")
     
-    # 3. Sekme eklendi (Test Araçları)
     tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Personel ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
     
     with tab_ozet:
@@ -437,15 +488,14 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                 time.sleep(1.5)
                 st.rerun()
                 
-    # YENİ TEST MODU SEKMESİ
     with tab_test:
         st.write("#### 🧪 Otomatik Veri Simülasyonu")
         st.write("Geliştirme sürecinde ekranların (Cari Mizanı, Tablolar vb.) nasıl göründüğünü test edebilmek için sisteme tek tıkla sanal veriler yükleyebilirsiniz.")
         
         if st.button("🚀 Sistemi Test Verileriyle Doldur", type="secondary"):
-            with st.spinner("Sanal Kullanıcılar, Cariler ve İşlemler Üretiliyor..."):
+            with st.spinner("Sanal Kullanıcılar, Cariler ve Belgeli İşlemler Üretiliyor..."):
                 
-                # 1. Sanal Kullanıcı (Personel) Üretimi
+                # 1. Sanal Kullanıcılar
                 dummy_users = [
                     {"ad_soyad": "Test Personel A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
                     {"ad_soyad": "Test Personel B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
@@ -454,9 +504,9 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     try:
                         supabase.table("app_users").insert(du).execute()
                     except:
-                        pass # Eğer daha önce eklendiyse benzersizlik (unique) hatasını yoksay
+                        pass 
                 
-                # 2. Sanal Cari Kart Üretimi
+                # 2. Sanal Cariler
                 dummy_cariler = [
                     {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Mavi Bilişim Teknolojileri A.Ş.", "doviz_tipi": "TL", "vergi_dairesi": "Bornova", "vkn_tckn": "1111111111", "olusturan": "Sistem Admin"},
                     {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Ege Gıda Pazarlama Ltd.", "doviz_tipi": "USD", "vergi_dairesi": "Karşıyaka", "vkn_tckn": "2222222222", "olusturan": "Sistem Admin"},
@@ -468,25 +518,34 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     except:
                         pass
                 
-                # Eklenen carilerin ID'lerini çek
                 cariler_db_test = supabase.table("cariler").select("id").execute().data
                 
-                # 3. Sanal İşlem (Fiş) Üretimi
+                # 3. Belge İçeren Sanal İşlemler (Örnek PDF linkleriyle)
                 if cariler_db_test:
                     evrak_tipleri = ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT"]
                     yonler = ["Borç", "Alacak"]
-                    for _ in range(10): # Toplam 10 adet rastgele işlem
+                    
+                    # Bazılarına koymak için test amaçlı sahte (dummy) PDF linki
+                    dummy_pdf_link = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+                    
+                    for i in range(10): 
                         secili_c_id = random.choice(cariler_db_test)["id"]
+                        
+                        # %50 ihtimalle dosya url'si eklensin
+                        fake_dosya_url = dummy_pdf_link if random.choice([True, False]) else None
+                        
                         supabase.table("islemler").insert({
                             "cari_id": secili_c_id,
                             "evrak_tipi": random.choice(evrak_tipleri),
                             "islem_yonu": random.choice(yonler),
                             "tutar": round(random.uniform(1000, 25000), 2),
                             "belge_no": f"EVR-{random.randint(10000, 99999)}",
-                            "aciklama": "Sistem tarafından otomatik üretilen test fişi.",
+                            "aciklama": "Otomatik üretilen test fişi.",
+                            "dosya_url": fake_dosya_url,
+                            "dosya_path": "test/path.pdf" if fake_dosya_url else None,
                             "isleyen_kisi": "Test Robotu"
                         }).execute()
                 
-                st.success("✅ Test verileri (Personeller, Cari Kartlar ve İşlemler) başarıyla oluşturuldu! Lütfen Cari Hareketler sayfasına gidip inceleyin.")
+                st.success("✅ Test verileri (Belgeli ve belgesiz karma) oluşturuldu!")
                 time.sleep(3)
                 st.rerun()
