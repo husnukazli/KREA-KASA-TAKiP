@@ -13,8 +13,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-# Sayfa Ayarları (Tam ekran, resmi başlık)
-st.set_page_config(page_title="Ticari Yönetim Sistemi", layout="wide", initial_sidebar_state="expanded")
+# Sayfa Ayarları (Kurumsal evrak çantası ikonu eklendi)
+st.set_page_config(page_title="Ticari Yönetim Sistemi", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
 
 # Özel CSS ile daha sade ve kurumsal görünüm
 st.markdown("""
@@ -65,7 +65,7 @@ if not st.session_state["logged_in"]:
                 st.error(f"Sistem Hatası: {e}")
 
     with col2:
-        st.subheader("Yeni Personel Kaydı")
+        st.subheader("Yeni Kullanıcı Kaydı")
         reg_ad_soyad = st.text_input("Ad Soyad", key="reg_name")
         reg_email = st.text_input("E-posta Adresi", key="reg_email")
         reg_pass = st.text_input("Şifre", type="password", key="reg_pass")
@@ -114,7 +114,7 @@ if not st.session_state["logged_in"]:
 # ==========================================
 with st.sidebar:
     st.markdown(f"### {st.session_state['ad_soyad']}")
-    display_role = "Yönetici" if st.session_state['role'] == "admin" else "Personel" if st.session_state['role'] == "onaylı" else "Beklemede"
+    display_role = "Yönetici" if st.session_state['role'] == "admin" else "Kullanıcı" if st.session_state['role'] == "onaylı" else "Beklemede"
     st.caption(f"Yetki Grubu: {display_role}")
     st.divider()
     
@@ -137,7 +137,7 @@ if secili_menu == "Cari Kart Tanımları":
         st.warning("Bu ekranı görüntüleme yetkiniz yok.")
     else:
         st.header("Cari Kart Tanımları")
-        st.write("Sistemdeki müşteri, tedarikçi veya personellerin ana verilerini buradan yönetebilirsiniz.")
+        st.write("Sistemdeki müşteri, tedarikçi veya kullanıcıların ana verilerini buradan yönetebilirsiniz.")
         
         tab_liste, tab_yeni = st.tabs(["Cari Listesi", "Yeni Cari Kart Aç"])
         
@@ -225,7 +225,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 toplam_borc = 0.0
                 toplam_alacak = 0.0
                 ekstre_listesi = []
-                evraksiz_islemler = [] # Sonradan belge yükleme için
+                evraksiz_islemler = [] 
                 
                 for islem in islemler:
                     tutar = float(islem["tutar"])
@@ -240,7 +240,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         
                     bakiye = toplam_borc - toplam_alacak
                     
-                    # Evrağı olmayan işlemleri listeye alıyoruz
                     if not islem.get("dosya_url"):
                         evraksiz_islemler.append(islem)
                     
@@ -254,7 +253,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         "Bakiye": f"{bakiye:,.2f}",
                         "Açıklama": islem.get("aciklama", ""),
                         "İşleyen": islem["isleyen_kisi"],
-                        "Belge": islem.get("dosya_url") # Link için gerçek URL
+                        "Belge": islem.get("dosya_url") 
                     })
                 
                 guncel_bakiye = toplam_borc - toplam_alacak
@@ -266,7 +265,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 m3.metric("Güncel Bakiye", f"{abs(guncel_bakiye):,.2f} {cari_doviz}")
                 m4.metric("Bakiye Durumu", bakiye_durumu)
                 
-                # 1. YENİ FİŞ GİRİŞ PANELİ
                 with st.expander("➕ Yeni Fiş / İşlem Girişi Yap"):
                     if "form_seed" not in st.session_state:
                         st.session_state["form_seed"] = 0
@@ -322,7 +320,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         st.session_state["form_seed"] += 1
                         st.rerun()
 
-                # 2. EKSİK EVRAK YÜKLEME PANELİ (YENİ)
                 if evraksiz_islemler:
                     with st.expander("📎 Eksik Evrak Yükle (Sonradan Belge Ekle)"):
                         st.info("Aşağıdaki işlemler sisteme belgesiz olarak kaydedilmiş. İlgili işlemi seçip faturasını/dekontunu sonradan ekleyebilirsiniz.")
@@ -357,13 +354,11 @@ elif secili_menu == "Cari Hareketler & Fişler":
                                 else:
                                     st.error("Lütfen önce bir belge seçin.")
                 
-                # 3. TABLO (AKILLI LİNK SÜTUNU İLE)
                 st.write("#### Hareket Dökümü (Yeniden Eskiye)")
                 if ekstre_listesi:
                     ekstre_listesi.reverse()
                     df_ekstre = pd.DataFrame(ekstre_listesi)
                     
-                    # Dosya linkleri için özel kolon ayarı
                     st.dataframe(
                         df_ekstre, 
                         use_container_width=True, 
@@ -371,7 +366,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                         column_config={
                             "Belge": st.column_config.LinkColumn(
                                 "Belge (İncele)", 
-                                display_text="İncele" # Tüm linklerin üstünde 'İncele' yazacak
+                                display_text="İncele" 
                             )
                         }
                     )
@@ -429,7 +424,7 @@ elif secili_menu == "Profil ve Ayarlar":
 elif secili_menu == "Yönetim Paneli (Admin)":
     st.header("Sistem Yönetim Paneli")
     
-    tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Personel ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
+    tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Kullanıcı ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
     
     with tab_ozet:
         cariler_db = supabase.table("cariler").select("id, doviz_tipi").execute().data
@@ -462,7 +457,7 @@ elif secili_menu == "Yönetim Paneli (Admin)":
     with tab_kullanici:
         bekleyenler = supabase.table("app_users").select("*").eq("role", "beklemede").execute().data
         if bekleyenler:
-            st.warning("Onay Bekleyen Personeller")
+            st.warning("Onay Bekleyen Kullanıcılar")
             for b in bekleyenler:
                 c1, c2 = st.columns([4,1])
                 c1.write(f"{b['ad_soyad']} ({b['email']})")
@@ -471,14 +466,14 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     st.rerun()
                     
         st.divider()
-        st.write("#### Kayıtlı Personeller ve Şifre Sıfırlama")
+        st.write("#### Kayıtlı Kullanıcılar ve Şifre Sıfırlama")
         all_users = supabase.table("app_users").select("*").execute().data
         if all_users:
-            secili_u_mail = st.selectbox("Personel Seçin", [u["email"] for u in all_users])
+            secili_u_mail = st.selectbox("Kullanıcı Seçin", [u["email"] for u in all_users])
             secili_u = next(u for u in all_users if u["email"] == secili_u_mail)
             
             st.write(f"**İsim:** {secili_u.get('ad_soyad')} | **Yetki:** {secili_u['role']}")
-            if st.button("Bu personelin şifresini '1234' olarak sıfırla", type="primary"):
+            if st.button("Bu kullanıcının şifresini '1234' olarak sıfırla", type="primary"):
                 temiz_mail = secili_u["email"].strip().lower()
                 supabase.table("app_users").update({
                     "password": hash_password("1234"),
@@ -495,10 +490,9 @@ elif secili_menu == "Yönetim Paneli (Admin)":
         if st.button("🚀 Sistemi Test Verileriyle Doldur", type="secondary"):
             with st.spinner("Sanal Kullanıcılar, Cariler ve Belgeli İşlemler Üretiliyor..."):
                 
-                # 1. Sanal Kullanıcılar
                 dummy_users = [
-                    {"ad_soyad": "Test Personel A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
-                    {"ad_soyad": "Test Personel B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
+                    {"ad_soyad": "Test Kullanıcı A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
+                    {"ad_soyad": "Test Kullanıcı B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
                 ]
                 for du in dummy_users:
                     try:
@@ -506,7 +500,6 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     except:
                         pass 
                 
-                # 2. Sanal Cariler
                 dummy_cariler = [
                     {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Mavi Bilişim Teknolojileri A.Ş.", "doviz_tipi": "TL", "vergi_dairesi": "Bornova", "vkn_tckn": "1111111111", "olusturan": "Sistem Admin"},
                     {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Ege Gıda Pazarlama Ltd.", "doviz_tipi": "USD", "vergi_dairesi": "Karşıyaka", "vkn_tckn": "2222222222", "olusturan": "Sistem Admin"},
@@ -520,18 +513,14 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                 
                 cariler_db_test = supabase.table("cariler").select("id").execute().data
                 
-                # 3. Belge İçeren Sanal İşlemler (Örnek PDF linkleriyle)
                 if cariler_db_test:
                     evrak_tipleri = ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT"]
                     yonler = ["Borç", "Alacak"]
                     
-                    # Bazılarına koymak için test amaçlı sahte (dummy) PDF linki
                     dummy_pdf_link = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
                     
                     for i in range(10): 
                         secili_c_id = random.choice(cariler_db_test)["id"]
-                        
-                        # %50 ihtimalle dosya url'si eklensin
                         fake_dosya_url = dummy_pdf_link if random.choice([True, False]) else None
                         
                         supabase.table("islemler").insert({
@@ -546,6 +535,6 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                             "isleyen_kisi": "Test Robotu"
                         }).execute()
                 
-                st.success("✅ Test verileri (Belgeli ve belgesiz karma) oluşturuldu!")
+                st.success("✅ Test verileri (Kullanıcılar, Cari Kartlar ve İşlemler) başarıyla oluşturuldu!")
                 time.sleep(3)
                 st.rerun()
