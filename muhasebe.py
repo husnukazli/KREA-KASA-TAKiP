@@ -433,7 +433,6 @@ with tab_gecmis:
 with tab_profil:
     st.markdown("### ⚙️ Profil ve Şifre Yönetimi")
     
-    # Sabit (veritabanında olmayan) admin hesabı için profil ekranı uyarısı
     if st.session_state["email"] == "admin":
         st.info("Sabit Yönetici (Admin) hesabı profil ve şifre güncelleyemez. Veritabanındaki onaylı bir hesapla giriş yapınız.")
     else:
@@ -444,16 +443,16 @@ with tab_profil:
                 
                 with st.form("profil_guncelleme_formu"):
                     st.subheader("Temel Bilgiler")
-                    p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad", ""))
-                    p_tel = st.text_input("Telefon Numarası", value=u_info.get("telefon", ""))
-                    p_konum = st.text_input("Şirket Konum", value=u_info.get("konum", ""))
-                    p_pozisyon = st.text_input("Pozisyon", value=u_info.get("pozisyon", ""))
-                    p_birim = st.text_input("Birim", value=u_info.get("birim", ""))
+                    # NoneType hatalarına karşı (p_ad or "") güvenlik kalkanları eklendi
+                    p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad") or "")
+                    p_tel = st.text_input("Telefon Numarası", value=u_info.get("telefon") or "")
+                    p_konum = st.text_input("Şirket Konum", value=u_info.get("konum") or "")
+                    p_pozisyon = st.text_input("Pozisyon", value=u_info.get("pozisyon") or "")
+                    p_birim = st.text_input("Birim", value=u_info.get("birim") or "")
                     
                     st.divider()
                     st.subheader("Şifre Değiştirme (İsteğe Bağlı)")
                     p_yeni_sifre = st.text_input("Yeni Şifre (Değiştirmek istemiyorsanız boş bırakın)", type="password")
-                    # Çift doğrulama alanı eklendi
                     p_yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar)", type="password")
                     
                     profil_kaydet = st.form_submit_button("💾 Bilgileri Güncelle", use_container_width=True)
@@ -463,18 +462,17 @@ with tab_profil:
                             st.error("⚠️ Girdiğiniz yeni şifreler birbiriyle uyuşmuyor, lütfen tekrar deneyin!")
                         else:
                             update_payload = {
-                                "ad_soyad": p_ad.strip(),
-                                "telefon": p_tel.strip(),
-                                "konum": p_konum.strip(),
-                                "pozisyon": p_pozisyon.strip(),
-                                "birim": p_birim.strip()
+                                "ad_soyad": (p_ad or "").strip(),
+                                "telefon": (p_tel or "").strip(),
+                                "konum": (p_konum or "").strip(),
+                                "pozisyon": (p_pozisyon or "").strip(),
+                                "birim": (p_birim or "").strip()
                             }
-                            if p_yeni_sifre.strip():
+                            if (p_yeni_sifre or "").strip():
                                 update_payload["password"] = hash_password(p_yeni_sifre.strip())
                                 
-                            # ID üzerinden güvenli güncelleme
                             supabase.table("app_users").update(update_payload).eq("id", st.session_state["user_id"]).execute()
-                            st.session_state["ad_soyad"] = p_ad.strip()
+                            st.session_state["ad_soyad"] = (p_ad or "").strip()
                             st.success("✅ Profil bilgileriniz başarıyla güncellendi!")
                             time.sleep(1.5)
                             st.rerun()
