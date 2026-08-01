@@ -539,10 +539,10 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                 
     with tab_test:
         st.write("#### 🧪 Genişletilmiş Otomatik Veri Simülasyonu")
-        st.write("Sistemi test etmek için tek tıkla **Çoklu Kasalar (TL, USD, EUR)**, **Farklı Dövizlerde Cariler** ve bu parametreleri tam kullanan **zenginleştirilmiş finansal hareketler** üretin.")
+        st.write("Sistemi test etmek için tek tıkla **Çoklu Kasalar (TL, USD, EUR)**, **Farklı Dövizlerde Cariler** ve bu parametreleri tam kullanan **zenginleştirilmiş finansal hareketler ve örnek belgeler** üretin.")
         
         if st.button("🚀 Kapsamlı Test Verilerini Yükle", type="secondary"):
-            with st.spinner("Çoklu Kasalar, Dövizli Cariler ve Entegre Hareketler Üretiliyor..."):
+            with st.spinner("Çoklu Kasalar, Dövizli Cariler ve Belgeli Entegre Hareketler Üretiliyor..."):
                 
                 # 1. Kullanıcılar
                 dummy_users = [
@@ -580,24 +580,21 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     except:
                         pass
                 
-                # 4. Veritabanından ID'leri çekerek akıllı ve entegre işlemler (Tahsilat, Tediye, Fatura) üretelim
+                # 4. Veritabanından ID'leri çekerek akıllı ve entegre işlemler üretelim (Belge detayları eklendi)
                 cariler_db_test = supabase.table("cariler").select("id, doviz_tipi").execute().data
                 kasalar_db_test = supabase.table("kasalar").select("id, doviz_tipi").execute().data
                 
                 if cariler_db_test and kasalar_db_test:
                     evrak_tipleri = ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Devir"]
                     
-                    # Toplam 20 adet zenginleştirilmiş test hareketi üretelim
                     for _ in range(20): 
                         secili_cari = random.choice(cariler_db_test)
                         
-                        # Cari ile aynı döviz tipindeki kasayı bulmaya çalış, yoksa rastgele seç
                         uygun_kasalar = [k for k in kasalar_db_test if k["doviz_tipi"] == secili_cari["doviz_tipi"]]
                         secili_kasa = random.choice(uygun_kasalar) if uygun_kasalar else random.choice(kasalar_db_test)
                         
                         evrak = random.choice(evrak_tipleri)
                         
-                        # Evrak tipine göre Borç / Alacak yönünü mantıksal oturtalım
                         if "Tahsilat" in evrak:
                             islem_yonu = "Alacak"
                         elif "Tediye" in evrak:
@@ -605,17 +602,20 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                         else:
                             islem_yonu = random.choice(["Borç", "Alacak"])
                         
+                        rastgele_id = random.randint(10000, 99999)
                         supabase.table("islemler").insert({
                             "cari_id": secili_cari["id"],
                             "kasa_id": secili_kasa["id"],
                             "evrak_tipi": evrak,
                             "islem_yonu": islem_yonu,
                             "tutar": round(random.uniform(2500, 75000), 2),
-                            "belge_no": f"TEST-DEC-{random.randint(10000, 99999)}",
+                            "belge_no": f"TEST-DEC-{rastgele_id}",
                             "aciklama": f"Otomatik simülasyon [{evrak}] kaydı.",
-                            "isleyen_kisi": "Test Robotu"
+                            "isleyen_kisi": "Test Robotu",
+                            "dosya_url": f"https://ornek-depolama.com/belgeler/dekont_{rastgele_id}.pdf",
+                            "dosya_path": f"belgeler/dekont_{rastgele_id}.pdf"
                         }).execute()
                 
-                st.success("✅ Çoklu kasalar, dövizli cariler ve entegre test hareketleri başarıyla oluşturuldu!")
+                st.success("✅ Çoklu kasalar, dövizli cariler, belgeli ve entegre test hareketleri başarıyla oluşturuldu!")
                 time.sleep(2)
                 st.rerun()
