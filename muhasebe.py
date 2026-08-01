@@ -117,7 +117,6 @@ with st.sidebar:
     st.caption(f"Yetki Grubu: {display_role}")
     st.divider()
     
-    # Kasa Tanımları menüye eklendi
     menu_secenekleri = ["Cari Hareketler & Fişler", "Tahsilat ve Ödeme (Kasa)", "Cari Kart Tanımları", "Kasa Tanımları", "Profil ve Ayarlar"]
     if st.session_state["role"] == "admin":
         menu_secenekleri.insert(0, "Yönetim Paneli (Admin)")
@@ -130,7 +129,7 @@ with st.sidebar:
         st.rerun()
 
 # ==========================================
-# MENÜ: KASA TANIMLARI (YENİ EKLENDİ)
+# MENÜ: KASA TANIMLARI
 # ==========================================
 if secili_menu == "Kasa Tanımları":
     if st.session_state["role"] not in ["onaylı", "admin"]:
@@ -242,7 +241,7 @@ elif secili_menu == "Cari Kart Tanımları":
                 st.error(f"Veri çekme hatası: {e}")
 
 # ==========================================
-# MENÜ: TAHSİLAT VE ÖDEME (YENİ EKLENDİ)
+# MENÜ: TAHSİLAT VE ÖDEME
 # ==========================================
 elif secili_menu == "Tahsilat ve Ödeme (Kasa)":
     st.header("Hızlı Tahsilat ve Ödeme Ekranı")
@@ -278,10 +277,10 @@ elif secili_menu == "Tahsilat ve Ödeme (Kasa)":
                 
                 # OTOMATİK BORÇ / ALACAK MANTIĞI
                 if "Tahsilat" in islem_tipi:
-                    islem_yonu = "Alacak" # Cari alacaklanır (borcu düşer), Kasa borçlanır (parası artar)
+                    islem_yonu = "Alacak" 
                     evrak_tipi = "Nakit Tahsilat"
                 else:
-                    islem_yonu = "Borç" # Cari borçlanır (alacağı düşer), Kasa alacaklanır (parası azalır)
+                    islem_yonu = "Borç" 
                     evrak_tipi = "Nakit Tediye (Ödeme)"
                     
                 try:
@@ -300,7 +299,7 @@ elif secili_menu == "Tahsilat ve Ödeme (Kasa)":
                     st.error(f"Hata oluştu: {e}")
 
 # ==========================================
-# MENÜ: CARİ HAREKETLER & FİŞLER (REVİZE EDİLDİ)
+# MENÜ: CARİ HAREKETLER & FİŞLER
 # ==========================================
 elif secili_menu == "Cari Hareketler & Fişler":
     st.header("Cari Hareket Föyü (Ekstre)")
@@ -368,7 +367,6 @@ elif secili_menu == "Cari Hareketler & Fişler":
             m4.metric("Bakiye Durumu", bakiye_durumu)
             
             with st.expander("➕ Sadece Fatura / Devir Fişi Gir (Kasa Etkilenmez)"):
-                # Burada tahsilat/ödeme yok, sadece fatura ve devir işlemleri girilir.
                 c1, c2 = st.columns(2)
                 f_evrak = c1.selectbox("Evrak Tipi", ["Satış Faturası (Cariyi Borçlandır)", "Alış Faturası (Cariyi Alacaklandır)", "Açılış/Devir (Borç)", "Açılış/Devir (Alacak)"])
                 f_tutar = c2.number_input(f"Tutar ({cari_doviz})", min_value=0.0, step=10.0, format="%.2f")
@@ -396,10 +394,9 @@ elif secili_menu == "Cari Hareketler & Fişler":
 
             st.write("#### Hareket Dökümü")
             if ekstre_listesi:
-                ekstre_listesi.reverse() # Yeniden eskiye
+                ekstre_listesi.reverse()
                 st.dataframe(pd.DataFrame(ekstre_listesi), use_container_width=True, hide_index=True)
                 
-                # İŞLEM REVİZE ET ALANI (YENİ)
                 with st.expander("✏️ Seçili İşlemi Revize Et veya Sil"):
                     st.info("Aşağıdan bir işlem seçerek tutar veya açıklama gibi detaylarını güncelleyebilirsiniz.")
                     secili_revize_etiketi = st.selectbox("Düzenlenecek İşlemi Seçin:", ["Seçiniz..."] + list(revize_opsiyonlari.keys()))
@@ -432,15 +429,162 @@ elif secili_menu == "Cari Hareketler & Fişler":
                 st.info("Bu cariye ait finansal hareket bulunmamaktadır.")
 
 # ==========================================
-# MENÜ: PROFİL VE AYARLAR (DEĞİŞMEDİ)
+# MENÜ: PROFİL VE AYARLAR
 # ==========================================
 elif secili_menu == "Profil ve Ayarlar":
     st.header("Kullanıcı Profili")
-    st.info("Ayarlar bölümü aktif.")
+    
+    if st.session_state["email"] == "admin":
+        st.info("Sistem Yöneticisi profili teknik olarak sabittir. Güncelleme yapılamaz.")
+    else:
+        try:
+            user_res = supabase.table("app_users").select("*").eq("id", st.session_state["user_id"]).execute()
+            if user_res.data:
+                u_info = user_res.data[0]
+                
+                with st.form("profil_formu"):
+                    st.subheader("Kurumsal Bilgiler")
+                    p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad") or "")
+                    p_tel = st.text_input("Telefon", value=u_info.get("telefon") or "")
+                    p_pozisyon = st.text_input("Görev/Pozisyon", value=u_info.get("pozisyon") or "")
+                    
+                    st.divider()
+                    st.subheader("Güvenlik (Şifre Değişimi)")
+                    p_sifre = st.text_input("Yeni Şifre (Boş bırakırsanız değişmez)", type="password")
+                    p_sifre_tekrar = st.text_input("Yeni Şifre Tekrar", type="password")
+                    
+                    if st.form_submit_button("Bilgileri Kaydet", type="primary"):
+                        if p_sifre and p_sifre != p_sifre_tekrar:
+                            st.error("Şifreler uyuşmuyor!")
+                        else:
+                            up_data = {
+                                "ad_soyad": (p_ad or "").strip(),
+                                "telefon": (p_tel or "").strip(),
+                                "pozisyon": (p_pozisyon or "").strip()
+                            }
+                            if p_sifre.strip():
+                                up_data["password"] = hash_password(p_sifre.strip())
+                            
+                            supabase.table("app_users").update(up_data).eq("id", st.session_state["user_id"]).execute()
+                            st.session_state["ad_soyad"] = (p_ad or "").strip()
+                            st.success("Profil güncellendi.")
+                            time.sleep(1)
+                            st.rerun()
+        except Exception as e:
+            st.error(f"Profil hatası: {e}")
 
 # ==========================================
-# MENÜ: YÖNETİM PANELİ (DEĞİŞMEDİ)
+# MENÜ: YÖNETİM PANELİ (SADECE ADMIN)
 # ==========================================
 elif secili_menu == "Yönetim Paneli (Admin)":
     st.header("Sistem Yönetim Paneli")
-    st.info("Admin ekranları aktif.")
+    
+    tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Kullanıcı ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
+    
+    with tab_ozet:
+        cariler_db = supabase.table("cariler").select("id, doviz_tipi").execute().data
+        islemler_db = supabase.table("islemler").select("cari_id, islem_yonu, tutar").execute().data
+        
+        if cariler_db and islemler_db:
+            ozet = {"TL": 0.0, "USD": 0.0, "EUR": 0.0}
+            cari_doviz_map = {c["id"]: c["doviz_tipi"] for c in cariler_db}
+            
+            for ism in islemler_db:
+                c_id = ism.get("cari_id")
+                if c_id in cari_doviz_map:
+                    d_tip = cari_doviz_map[c_id]
+                    t = float(ism["tutar"])
+                    if ism["islem_yonu"] == "Borç":
+                        ozet[d_tip] += t  
+                    else:
+                        ozet[d_tip] -= t  
+                        
+            st.write("#### Genel Şirket Bakiyesi (Müşteri/Tedarikçi Net Durum)")
+            st.caption("Pozitif değerler piyasadan toplam alacağınızı, negatif değerler piyasaya olan toplam borcunuzu temsil eder.")
+            
+            k1, k2, k3 = st.columns(3)
+            k1.metric("TL Net Durum", f"{ozet['TL']:,.2f} TL")
+            k2.metric("USD Net Durum", f"{ozet['USD']:,.2f} USD")
+            k3.metric("EUR Net Durum", f"{ozet['EUR']:,.2f} EUR")
+        else:
+            st.info("Hesaplanacak yeterli veri bulunamadı.")
+
+    with tab_kullanici:
+        bekleyenler = supabase.table("app_users").select("*").eq("role", "beklemede").execute().data
+        if bekleyenler:
+            st.warning("Onay Bekleyen Kullanıcılar")
+            for b in bekleyenler:
+                c1, c2 = st.columns([4,1])
+                c1.write(f"{b['ad_soyad']} ({b['email']})")
+                if c2.button("Yetki Ver", key=f"onay_{b['id']}"):
+                    supabase.table("app_users").update({"role":"onaylı"}).eq("id", b["id"]).execute()
+                    st.rerun()
+                    
+        st.divider()
+        st.write("#### Kayıtlı Kullanıcılar ve Şifre Sıfırlama")
+        all_users = supabase.table("app_users").select("*").execute().data
+        if all_users:
+            secili_u_mail = st.selectbox("Kullanıcı Seçin", [u["email"] for u in all_users])
+            secili_u = next(u for u in all_users if u["email"] == secili_u_mail)
+            
+            st.write(f"**İsim:** {secili_u.get('ad_soyad')} | **Yetki:** {secili_u['role']}")
+            if st.button("Bu kullanıcının şifresini '1234' olarak sıfırla", type="primary"):
+                temiz_mail = secili_u["email"].strip().lower()
+                supabase.table("app_users").update({
+                    "password": hash_password("1234"),
+                    "email": temiz_mail
+                }).eq("id", secili_u["id"]).execute()
+                st.success("Şifre sıfırlandı!")
+                time.sleep(1.5)
+                st.rerun()
+                
+    with tab_test:
+        st.write("#### 🧪 Otomatik Veri Simülasyonu")
+        st.write("Geliştirme sürecinde ekranların (Cari Mizanı, Tablolar vb.) nasıl göründüğünü test edebilmek için sisteme tek tıkla sanal veriler yükleyebilirsiniz.")
+        
+        if st.button("🚀 Sistemi Test Verileriyle Doldur", type="secondary"):
+            with st.spinner("Sanal Kullanıcılar, Cariler ve Belgeli İşlemler Üretiliyor..."):
+                
+                dummy_users = [
+                    {"ad_soyad": "Test Kullanıcı A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
+                    {"ad_soyad": "Test Kullanıcı B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
+                ]
+                for du in dummy_users:
+                    try:
+                        supabase.table("app_users").insert(du).execute()
+                    except:
+                        pass 
+                
+                dummy_cariler = [
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Mavi Bilişim Teknolojileri A.Ş.", "doviz_tipi": "TL", "vergi_dairesi": "Bornova", "vkn_tckn": "1111111111", "olusturan": "Sistem Admin"},
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Ege Gıda Pazarlama Ltd.", "doviz_tipi": "USD", "vergi_dairesi": "Karşıyaka", "vkn_tckn": "2222222222", "olusturan": "Sistem Admin"},
+                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Demir İnşaat ve Malz. Sanayi", "doviz_tipi": "EUR", "vergi_dairesi": "Konak", "vkn_tckn": "3333333333", "olusturan": "Sistem Admin"}
+                ]
+                for dc in dummy_cariler:
+                    try:
+                        supabase.table("cariler").insert(dc).execute()
+                    except:
+                        pass
+                
+                cariler_db_test = supabase.table("cariler").select("id").execute().data
+                
+                if cariler_db_test:
+                    evrak_tipleri = ["Fatura", "Devir"]
+                    yonler = ["Borç", "Alacak"]
+                    
+                    for i in range(10): 
+                        secili_c_id = random.choice(cariler_db_test)["id"]
+                        
+                        supabase.table("islemler").insert({
+                            "cari_id": secili_c_id,
+                            "evrak_tipi": random.choice(evrak_tipleri),
+                            "islem_yonu": random.choice(yonler),
+                            "tutar": round(random.uniform(1000, 25000), 2),
+                            "belge_no": f"EVR-{random.randint(10000, 99999)}",
+                            "aciklama": "Otomatik üretilen test fişi.",
+                            "isleyen_kisi": "Test Robotu"
+                        }).execute()
+                
+                st.success("✅ Test verileri başarıyla oluşturuldu!")
+                time.sleep(3)
+                st.rerun()
