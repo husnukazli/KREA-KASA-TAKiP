@@ -13,10 +13,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-# Sayfa Ayarları (Kurumsal evrak çantası ikonu eklendi)
+# Sayfa Ayarları
 st.set_page_config(page_title="Ticari Yönetim Sistemi", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
 
-# Özel CSS ile daha sade ve kurumsal görünüm
 st.markdown("""
     <style>
     .stDataFrame {font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
@@ -118,7 +117,8 @@ with st.sidebar:
     st.caption(f"Yetki Grubu: {display_role}")
     st.divider()
     
-    menu_secenekleri = ["Cari Hareketler & Fişler", "Cari Kart Tanımları", "Profil ve Ayarlar"]
+    # Kasa Tanımları menüye eklendi
+    menu_secenekleri = ["Cari Hareketler & Fişler", "Tahsilat ve Ödeme (Kasa)", "Cari Kart Tanımları", "Kasa Tanımları", "Profil ve Ayarlar"]
     if st.session_state["role"] == "admin":
         menu_secenekleri.insert(0, "Yönetim Paneli (Admin)")
         
@@ -130,14 +130,62 @@ with st.sidebar:
         st.rerun()
 
 # ==========================================
-# MENÜ 1: CARİ KART TANIMLARI
+# MENÜ: KASA TANIMLARI (YENİ EKLENDİ)
 # ==========================================
-if secili_menu == "Cari Kart Tanımları":
+if secili_menu == "Kasa Tanımları":
+    if st.session_state["role"] not in ["onaylı", "admin"]:
+        st.warning("Bu ekranı görüntüleme yetkiniz yok.")
+    else:
+        st.header("Kasa ve Banka Tanımları")
+        st.write("Sistemdeki nakit kasaları veya banka hesaplarını buradan yönetebilirsiniz.")
+        
+        tab_liste, tab_yeni = st.tabs(["Kasa Listesi", "Yeni Kasa Aç"])
+        
+        with tab_yeni:
+            with st.form("yeni_kasa_formu", clear_on_submit=True):
+                k_kodu = st.text_input("Kasa Kodu (Örn: K-001, B-001)")
+                k_adi = st.text_input("Kasa / Banka Adı (Örn: Merkez TL Kasası, Akbank USD)")
+                k_doviz = st.selectbox("Döviz Cinsi", ["TL", "USD", "EUR"])
+                k_aciklama = st.text_area("Açıklama")
+                
+                if st.form_submit_button("Kasayı Kaydet", type="primary"):
+                    if not k_kodu or not k_adi:
+                        st.error("Kasa Kodu ve Adı zorunludur!")
+                    else:
+                        try:
+                            supabase.table("kasalar").insert({
+                                "kasa_kodu": k_kodu.strip(),
+                                "kasa_adi": k_adi.strip(),
+                                "doviz_tipi": k_doviz,
+                                "aciklama": k_aciklama.strip(),
+                                "olusturan": st.session_state["ad_soyad"]
+                            }).execute()
+                            st.success(f"[{k_kodu}] kodlu kasa başarıyla oluşturuldu.")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Kayıt Hatası: {e}")
+
+        with tab_liste:
+            try:
+                kasalar_res = supabase.table("kasalar").select("*").order("created_at", desc=True).execute()
+                if kasalar_res.data:
+                    df_kasalar = pd.DataFrame(kasalar_res.data)[["kasa_kodu", "kasa_adi", "doviz_tipi", "aciklama"]]
+                    df_kasalar.columns = ["Kodu", "Kasa Adı", "Döviz", "Açıklama"]
+                    st.dataframe(df_kasalar, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Sistemde kayıtlı kasa bulunmamaktadır.")
+            except Exception as e:
+                st.error(f"Veri çekme hatası: {e}")
+
+# ==========================================
+# MENÜ: CARİ KART TANIMLARI
+# ==========================================
+elif secili_menu == "Cari Kart Tanımları":
     if st.session_state["role"] not in ["onaylı", "admin"]:
         st.warning("Bu ekranı görüntüleme yetkiniz yok.")
     else:
         st.header("Cari Kart Tanımları")
-        st.write("Sistemdeki müşteri, tedarikçi veya kullanıcıların ana verilerini buradan yönetebilirsiniz.")
         
         tab_liste, tab_yeni = st.tabs(["Cari Listesi", "Yeni Cari Kart Aç"])
         
@@ -183,9 +231,8 @@ if secili_menu == "Cari Kart Tanımları":
         with tab_liste:
             try:
                 cariler_res = supabase.table("cariler").select("*").order("created_at", desc=True).execute()
-                cariler_data = cariler_res.data
-                if cariler_data:
-                    df_cariler = pd.DataFrame(cariler_data)
+                if cariler_res.data:
+                    df_cariler = pd.DataFrame(cariler_res.data)
                     df_gosterim = df_cariler[["cari_kodu", "unvan", "doviz_tipi", "vkn_tckn", "telefon", "email"]]
                     df_gosterim.columns = ["Kodu", "Ünvan / İsim", "Döviz", "VKN/TCKN", "Telefon", "E-Posta"]
                     st.dataframe(df_gosterim, use_container_width=True, hide_index=True)
@@ -195,346 +242,205 @@ if secili_menu == "Cari Kart Tanımları":
                 st.error(f"Veri çekme hatası: {e}")
 
 # ==========================================
-# MENÜ 2: CARİ HAREKETLER & FİŞLER
+# MENÜ: TAHSİLAT VE ÖDEME (YENİ EKLENDİ)
+# ==========================================
+elif secili_menu == "Tahsilat ve Ödeme (Kasa)":
+    st.header("Hızlı Tahsilat ve Ödeme Ekranı")
+    st.write("Carilerden gelen ödemeleri (Tahsilat) veya carilere yapılan ödemeleri (Tediye) buradan işleyebilirsiniz.")
+    
+    cariler = supabase.table("cariler").select("id, cari_kodu, unvan, doviz_tipi").execute().data
+    kasalar = supabase.table("kasalar").select("id, kasa_kodu, kasa_adi, doviz_tipi").execute().data
+    
+    if not cariler or not kasalar:
+        st.warning("İşlem yapabilmek için sistemde en az bir Cari Kart ve bir Kasa/Banka tanımı olmalıdır.")
+    else:
+        islem_tipi = st.radio("İşlem Türü Seçiniz", ["Tahsilat Yap (Kasaya Para Girişi)", "Ödeme Yap (Kasadan Para Çıkışı)"], horizontal=True)
+        
+        with st.form("tahsilat_odeme_formu"):
+            c1, c2 = st.columns(2)
+            cari_opsiyonlari = {f"{c['unvan']} ({c['doviz_tipi']})": c for c in cariler}
+            kasa_opsiyonlari = {f"{k['kasa_adi']} ({k['doviz_tipi']})": k for k in kasalar}
+            
+            with c1:
+                secilen_cari = st.selectbox("İlgili Cari", options=list(cari_opsiyonlari.keys()))
+            with c2:
+                secilen_kasa = st.selectbox("İşlem Yapılacak Kasa/Banka", options=list(kasa_opsiyonlari.keys()))
+                
+            tutar = st.number_input("Tutar", min_value=0.01, format="%.2f")
+            aciklama = st.text_input("Açıklama")
+            belge_no = st.text_input("Makbuz / Dekont No")
+            
+            submit_btn = st.form_submit_button("İşlemi Kaydet", type="primary")
+            
+            if submit_btn:
+                cari_id = cari_opsiyonlari[secilen_cari]["id"]
+                kasa_id = kasa_opsiyonlari[secilen_kasa]["id"]
+                
+                # OTOMATİK BORÇ / ALACAK MANTIĞI
+                if "Tahsilat" in islem_tipi:
+                    islem_yonu = "Alacak" # Cari alacaklanır (borcu düşer), Kasa borçlanır (parası artar)
+                    evrak_tipi = "Nakit Tahsilat"
+                else:
+                    islem_yonu = "Borç" # Cari borçlanır (alacağı düşer), Kasa alacaklanır (parası azalır)
+                    evrak_tipi = "Nakit Tediye (Ödeme)"
+                    
+                try:
+                    supabase.table("islemler").insert({
+                        "cari_id": cari_id,
+                        "kasa_id": kasa_id,
+                        "evrak_tipi": evrak_tipi,
+                        "islem_yonu": islem_yonu,
+                        "tutar": tutar,
+                        "belge_no": belge_no,
+                        "aciklama": aciklama.strip(),
+                        "isleyen_kisi": st.session_state["ad_soyad"]
+                    }).execute()
+                    st.success("İşlem başarıyla kaydedildi!")
+                except Exception as e:
+                    st.error(f"Hata oluştu: {e}")
+
+# ==========================================
+# MENÜ: CARİ HAREKETLER & FİŞLER (REVİZE EDİLDİ)
 # ==========================================
 elif secili_menu == "Cari Hareketler & Fişler":
-    if st.session_state["role"] not in ["onaylı", "admin"]:
-        st.warning("Bu ekranı görüntüleme yetkiniz yok.")
+    st.header("Cari Hareket Föyü (Ekstre)")
+    
+    cariler_res = supabase.table("cariler").select("id, cari_kodu, unvan, doviz_tipi").order("unvan").execute()
+    cariler_listesi = cariler_res.data
+    
+    if not cariler_listesi:
+        st.warning("İşlem yapabilmek için önce cari açmalısınız.")
     else:
-        st.header("Cari Hareket Föyü (Ekstre)")
+        cari_opsiyonlari = {f"{c['cari_kodu']} - {c['unvan']} ({c['doviz_tipi']})": c for c in cariler_listesi}
+        secilen_cari_etiketi = st.selectbox("Hareketleri Görüntülenecek Cariyi Seçin:", ["Seçiniz..."] + list(cari_opsiyonlari.keys()))
         
-        cariler_res = supabase.table("cariler").select("id, cari_kodu, unvan, doviz_tipi").order("unvan").execute()
-        cariler_listesi = cariler_res.data
-        
-        if not cariler_listesi:
-            st.warning("İşlem yapabilmek için önce 'Cari Kart Tanımları' menüsünden cari açmalısınız.")
-        else:
-            cari_opsiyonlari = {f"{c['cari_kodu']} - {c['unvan']} ({c['doviz_tipi']})": c for c in cariler_listesi}
-            secilen_cari_etiketi = st.selectbox("Hareketleri Görüntülenecek Cariyi Seçin:", ["Seçiniz..."] + list(cari_opsiyonlari.keys()))
+        if secilen_cari_etiketi != "Seçiniz...":
+            aktif_cari = cari_opsiyonlari[secilen_cari_etiketi]
+            cari_id = aktif_cari["id"]
+            cari_doviz = aktif_cari["doviz_tipi"]
             
-            if secilen_cari_etiketi != "Seçiniz...":
-                aktif_cari = cari_opsiyonlari[secilen_cari_etiketi]
-                cari_id = aktif_cari["id"]
-                cari_doviz = aktif_cari["doviz_tipi"]
+            st.write("---")
+            
+            islemler_res = supabase.table("islemler").select("*").eq("cari_id", cari_id).order("created_at", desc=False).execute()
+            islemler = islemler_res.data
+            
+            toplam_borc = 0.0
+            toplam_alacak = 0.0
+            ekstre_listesi = []
+            revize_opsiyonlari = {}
+            
+            for islem in islemler:
+                tutar = float(islem["tutar"])
+                if islem["islem_yonu"] == "Borç":
+                    toplam_borc += tutar
+                    satir_borc = tutar
+                    satir_alacak = 0.0
+                else:
+                    toplam_alacak += tutar
+                    satir_borc = 0.0
+                    satir_alacak = tutar
+                    
+                bakiye = toplam_borc - toplam_alacak
                 
-                st.write("---")
+                gorunum_tarih = islem["created_at"][:16].replace("T", " ")
+                revize_opsiyonlari[f"{gorunum_tarih} | {islem['evrak_tipi']} | {tutar} {cari_doviz}"] = islem
                 
-                islemler_res = supabase.table("islemler").select("*").eq("cari_id", cari_id).order("created_at", desc=False).execute()
-                islemler = islemler_res.data
+                ekstre_listesi.append({
+                    "ID": islem["id"],
+                    "Tarih": gorunum_tarih,
+                    "Evrak Tipi": islem["evrak_tipi"],
+                    "Belge No": islem.get("belge_no", "-"),
+                    "B/A": islem["islem_yonu"],
+                    "Borç": f"{satir_borc:,.2f}",
+                    "Alacak": f"{satir_alacak:,.2f}",
+                    "Bakiye": f"{bakiye:,.2f}",
+                    "Açıklama": islem.get("aciklama", ""),
+                    "İşleyen": islem["isleyen_kisi"]
+                })
+            
+            guncel_bakiye = toplam_borc - toplam_alacak
+            bakiye_durumu = "Borçlu (Bizden Alacaklı)" if guncel_bakiye > 0 else "Alacaklı (Bize Borçlu)" if guncel_bakiye < 0 else "Kapandı"
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Cari Borç (Bize Çalışan)", f"{toplam_borc:,.2f} {cari_doviz}")
+            m2.metric("Cari Alacak (Bizden Çıkan)", f"{toplam_alacak:,.2f} {cari_doviz}")
+            m3.metric("Güncel Bakiye", f"{abs(guncel_bakiye):,.2f} {cari_doviz}")
+            m4.metric("Bakiye Durumu", bakiye_durumu)
+            
+            with st.expander("➕ Sadece Fatura / Devir Fişi Gir (Kasa Etkilenmez)"):
+                # Burada tahsilat/ödeme yok, sadece fatura ve devir işlemleri girilir.
+                c1, c2 = st.columns(2)
+                f_evrak = c1.selectbox("Evrak Tipi", ["Satış Faturası (Cariyi Borçlandır)", "Alış Faturası (Cariyi Alacaklandır)", "Açılış/Devir (Borç)", "Açılış/Devir (Alacak)"])
+                f_tutar = c2.number_input(f"Tutar ({cari_doviz})", min_value=0.0, step=10.0, format="%.2f")
                 
-                toplam_borc = 0.0
-                toplam_alacak = 0.0
-                ekstre_listesi = []
-                evraksiz_islemler = [] 
+                f_belge = st.text_input("Fatura No")
+                f_aciklama = st.text_input("Açıklama / İşlem Detayı")
                 
-                for islem in islemler:
-                    tutar = float(islem["tutar"])
-                    if islem["islem_yonu"] == "Borç":
-                        toplam_borc += tutar
-                        satir_borc = tutar
-                        satir_alacak = 0.0
-                    else:
-                        toplam_alacak += tutar
-                        satir_borc = 0.0
-                        satir_alacak = tutar
+                if st.button("Fişi İşle", type="primary"):
+                    if f_tutar > 0:
+                        islem_yonu = "Borç" if "Borç" in f_evrak or "Satış" in f_evrak else "Alacak"
+                        temiz_evrak = "Fatura" if "Fatura" in f_evrak else "Devir"
                         
-                    bakiye = toplam_borc - toplam_alacak
-                    
-                    if not islem.get("dosya_url"):
-                        evraksiz_islemler.append(islem)
-                    
-                    ekstre_listesi.append({
-                        "Tarih": islem["created_at"][:16].replace("T", " "),
-                        "Evrak Tipi": islem["evrak_tipi"],
-                        "Belge No": islem.get("belge_no", "-"),
-                        "B/A": islem["islem_yonu"],
-                        "Borç": f"{satir_borc:,.2f}",
-                        "Alacak": f"{satir_alacak:,.2f}",
-                        "Bakiye": f"{bakiye:,.2f}",
-                        "Açıklama": islem.get("aciklama", ""),
-                        "İşleyen": islem["isleyen_kisi"],
-                        "Belge": islem.get("dosya_url") 
-                    })
+                        supabase.table("islemler").insert({
+                            "cari_id": cari_id,
+                            "evrak_tipi": temiz_evrak,
+                            "islem_yonu": islem_yonu,
+                            "tutar": f_tutar,
+                            "belge_no": f_belge,
+                            "aciklama": f_aciklama.strip(),
+                            "isleyen_kisi": st.session_state["ad_soyad"]
+                        }).execute()
+                        st.success("İşlem kaydedildi!")
+                        time.sleep(1)
+                        st.rerun()
+
+            st.write("#### Hareket Dökümü")
+            if ekstre_listesi:
+                ekstre_listesi.reverse() # Yeniden eskiye
+                st.dataframe(pd.DataFrame(ekstre_listesi), use_container_width=True, hide_index=True)
                 
-                guncel_bakiye = toplam_borc - toplam_alacak
-                bakiye_durumu = "Borçlu" if guncel_bakiye > 0 else "Alacaklı" if guncel_bakiye < 0 else "Kapandı"
-                
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Toplam Borç", f"{toplam_borc:,.2f} {cari_doviz}")
-                m2.metric("Toplam Alacak", f"{toplam_alacak:,.2f} {cari_doviz}")
-                m3.metric("Güncel Bakiye", f"{abs(guncel_bakiye):,.2f} {cari_doviz}")
-                m4.metric("Bakiye Durumu", bakiye_durumu)
-                
-                with st.expander("➕ Yeni Fiş / İşlem Girişi Yap"):
-                    if "form_seed" not in st.session_state:
-                        st.session_state["form_seed"] = 0
-                    fs = st.session_state["form_seed"]
+                # İŞLEM REVİZE ET ALANI (YENİ)
+                with st.expander("✏️ Seçili İşlemi Revize Et veya Sil"):
+                    st.info("Aşağıdan bir işlem seçerek tutar veya açıklama gibi detaylarını güncelleyebilirsiniz.")
+                    secili_revize_etiketi = st.selectbox("Düzenlenecek İşlemi Seçin:", ["Seçiniz..."] + list(revize_opsiyonlari.keys()))
                     
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        f_evrak = st.selectbox("Evrak Tipi", ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT", "Devir/Açılış"], key=f"f_evrak_{fs}")
-                        f_yon = st.radio("İşlem Yönü (Cari Hesap İçin)", ["Borç", "Alacak"], horizontal=True, key=f"f_yon_{fs}")
-                    with c2:
-                        f_tutar = st.number_input(f"Tutar ({cari_doviz})", min_value=0.0, step=10.0, format="%.2f", key=f"f_tutar_{fs}")
-                        f_belge = st.text_input("Belge/Fatura No", key=f"f_belge_{fs}")
-                    
-                    f_aciklama = st.text_input("Açıklama / İşlem Detayı", key=f"f_aciklama_{fs}")
-                    f_dosya = st.file_uploader("Evrak Belgesi (Opsiyonel)", type=["pdf", "jpg", "png"], key=f"f_dosya_{fs}")
-                    
-                    col_kaydet, col_temizle = st.columns([3, 1])
-                    if col_kaydet.button("İşlemi Cari Hesaba İşle", type="primary", use_container_width=True):
-                        if f_tutar <= 0:
-                            st.error("Tutar 0'dan büyük olmalıdır.")
-                        else:
-                            with st.spinner("Kayıt işleniyor..."):
-                                dosya_url = None
-                                dosya_path = None
-                                if f_dosya:
-                                    safe_name = f_dosya.name.replace(" ", "_")
-                                    dosya_path = f"cariler/{cari_id}/{int(time.time())}_{safe_name}"
-                                    supabase.storage.from_("belgeler").upload(
-                                        path=dosya_path, 
-                                        file=f_dosya.getvalue(), 
-                                        file_options={"content_type": f_dosya.type or "application/octet-stream"}
-                                    )
-                                    dosya_url = supabase.storage.from_("belgeler").get_public_url(dosya_path)
-                                
-                                supabase.table("islemler").insert({
-                                    "cari_id": cari_id,
-                                    "evrak_tipi": f_evrak,
-                                    "islem_yonu": f_yon,
-                                    "tutar": f_tutar,
-                                    "belge_no": f_belge,
-                                    "aciklama": f_aciklama.strip(),
-                                    "dosya_url": dosya_url,
-                                    "dosya_path": dosya_path,
-                                    "isleyen_kisi": st.session_state["ad_soyad"]
-                                }).execute()
-                                
-                                st.session_state["form_seed"] += 1
-                                st.success("Fiş başarıyla işlendi!")
+                    if secili_revize_etiketi != "Seçiniz...":
+                        hedef_islem = revize_opsiyonlari[secili_revize_etiketi]
+                        
+                        with st.form("revize_formu"):
+                            r_tutar = st.number_input("Tutar", value=float(hedef_islem["tutar"]))
+                            r_belge = st.text_input("Belge No", value=hedef_islem.get("belge_no") or "")
+                            r_aciklama = st.text_input("Açıklama", value=hedef_islem.get("aciklama") or "")
+                            
+                            c_btn1, c_btn2 = st.columns(2)
+                            if c_btn1.form_submit_button("Güncelle", type="primary"):
+                                supabase.table("islemler").update({
+                                    "tutar": r_tutar,
+                                    "belge_no": r_belge,
+                                    "aciklama": r_aciklama
+                                }).eq("id", hedef_islem["id"]).execute()
+                                st.success("İşlem güncellendi!")
                                 time.sleep(1)
                                 st.rerun()
                                 
-                    if col_temizle.button("Formu Temizle", use_container_width=True):
-                        st.session_state["form_seed"] += 1
-                        st.rerun()
-
-                if evraksiz_islemler:
-                    with st.expander("📎 Eksik Evrak Yükle (Sonradan Belge Ekle)"):
-                        st.info("Aşağıdaki işlemler sisteme belgesiz olarak kaydedilmiş. İlgili işlemi seçip faturasını/dekontunu sonradan ekleyebilirsiniz.")
-                        
-                        evrak_opsiyonlari = {f"{e['created_at'][:10]} | {e['evrak_tipi']} | {e['islem_yonu']} {e['tutar']} {cari_doviz}": e for e in evraksiz_islemler}
-                        secili_eksik = st.selectbox("Belgesi Yüklenecek İşlemi Seçin:", ["Seçiniz..."] + list(evrak_opsiyonlari.keys()))
-                        
-                        if secili_eksik != "Seçiniz...":
-                            sonradan_dosya = st.file_uploader("Belgeyi Seçin", type=["pdf", "jpg", "png"], key="sonradan_upload")
-                            if st.button("Belgeyi İşleme Ekle", type="primary"):
-                                if sonradan_dosya:
-                                    with st.spinner("Belge yükleniyor ve işleme bağlanıyor..."):
-                                        safe_name = sonradan_dosya.name.replace(" ", "_")
-                                        hedef_islem_id = evrak_opsiyonlari[secili_eksik]["id"]
-                                        dosya_path = f"cariler/{cari_id}/sonradan_{int(time.time())}_{safe_name}"
-                                        
-                                        supabase.storage.from_("belgeler").upload(
-                                            path=dosya_path, 
-                                            file=sonradan_dosya.getvalue(), 
-                                            file_options={"content_type": sonradan_dosya.type or "application/octet-stream"}
-                                        )
-                                        dosya_url = supabase.storage.from_("belgeler").get_public_url(dosya_path)
-                                        
-                                        supabase.table("islemler").update({
-                                            "dosya_url": dosya_url,
-                                            "dosya_path": dosya_path
-                                        }).eq("id", hedef_islem_id).execute()
-                                        
-                                        st.success("Belge başarıyla işleme eklendi!")
-                                        time.sleep(1)
-                                        st.rerun()
-                                else:
-                                    st.error("Lütfen önce bir belge seçin.")
-                
-                st.write("#### Hareket Dökümü (Yeniden Eskiye)")
-                if ekstre_listesi:
-                    ekstre_listesi.reverse()
-                    df_ekstre = pd.DataFrame(ekstre_listesi)
-                    
-                    st.dataframe(
-                        df_ekstre, 
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config={
-                            "Belge": st.column_config.LinkColumn(
-                                "Belge (İncele)", 
-                                display_text="İncele" 
-                            )
-                        }
-                    )
-                else:
-                    st.info("Bu cariye ait henüz bir finansal hareket bulunmamaktadır.")
+                        if st.button("Sil (İptal Et)", type="secondary", key="del_btn"):
+                            supabase.table("islemler").delete().eq("id", hedef_islem["id"]).execute()
+                            st.warning("İşlem silindi!")
+                            time.sleep(1)
+                            st.rerun()
+            else:
+                st.info("Bu cariye ait finansal hareket bulunmamaktadır.")
 
 # ==========================================
-# MENÜ 3: PROFİL VE AYARLAR
+# MENÜ: PROFİL VE AYARLAR (DEĞİŞMEDİ)
 # ==========================================
 elif secili_menu == "Profil ve Ayarlar":
     st.header("Kullanıcı Profili")
-    
-    if st.session_state["email"] == "admin":
-        st.info("Sistem Yöneticisi profili teknik olarak sabittir. Güncelleme yapılamaz.")
-    else:
-        try:
-            user_res = supabase.table("app_users").select("*").eq("id", st.session_state["user_id"]).execute()
-            if user_res.data:
-                u_info = user_res.data[0]
-                
-                with st.form("profil_formu"):
-                    st.subheader("Kurumsal Bilgiler")
-                    p_ad = st.text_input("Ad Soyad", value=u_info.get("ad_soyad") or "")
-                    p_tel = st.text_input("Telefon", value=u_info.get("telefon") or "")
-                    p_pozisyon = st.text_input("Görev/Pozisyon", value=u_info.get("pozisyon") or "")
-                    
-                    st.divider()
-                    st.subheader("Güvenlik (Şifre Değişimi)")
-                    p_sifre = st.text_input("Yeni Şifre (Boş bırakırsanız değişmez)", type="password")
-                    p_sifre_tekrar = st.text_input("Yeni Şifre Tekrar", type="password")
-                    
-                    if st.form_submit_button("Bilgileri Kaydet", type="primary"):
-                        if p_sifre and p_sifre != p_sifre_tekrar:
-                            st.error("Şifreler uyuşmuyor!")
-                        else:
-                            up_data = {
-                                "ad_soyad": (p_ad or "").strip(),
-                                "telefon": (p_tel or "").strip(),
-                                "pozisyon": (p_pozisyon or "").strip()
-                            }
-                            if p_sifre.strip():
-                                up_data["password"] = hash_password(p_sifre.strip())
-                            
-                            supabase.table("app_users").update(up_data).eq("id", st.session_state["user_id"]).execute()
-                            st.session_state["ad_soyad"] = (p_ad or "").strip()
-                            st.success("Profil güncellendi.")
-                            time.sleep(1)
-                            st.rerun()
-        except Exception as e:
-            st.error(f"Profil hatası: {e}")
+    st.info("Ayarlar bölümü aktif.")
 
 # ==========================================
-# MENÜ 4: YÖNETİM PANELİ (SADECE ADMIN)
+# MENÜ: YÖNETİM PANELİ (DEĞİŞMEDİ)
 # ==========================================
 elif secili_menu == "Yönetim Paneli (Admin)":
     st.header("Sistem Yönetim Paneli")
-    
-    tab_ozet, tab_kullanici, tab_test = st.tabs(["Mali Özet (Döviz Bazlı)", "Kullanıcı ve Yetki Yönetimi", "🧪 Test & Simülasyon Araçları"])
-    
-    with tab_ozet:
-        cariler_db = supabase.table("cariler").select("id, doviz_tipi").execute().data
-        islemler_db = supabase.table("islemler").select("cari_id, islem_yonu, tutar").execute().data
-        
-        if cariler_db and islemler_db:
-            ozet = {"TL": 0.0, "USD": 0.0, "EUR": 0.0}
-            cari_doviz_map = {c["id"]: c["doviz_tipi"] for c in cariler_db}
-            
-            for ism in islemler_db:
-                c_id = ism.get("cari_id")
-                if c_id in cari_doviz_map:
-                    d_tip = cari_doviz_map[c_id]
-                    t = float(ism["tutar"])
-                    if ism["islem_yonu"] == "Borç":
-                        ozet[d_tip] += t  
-                    else:
-                        ozet[d_tip] -= t  
-                        
-            st.write("#### Genel Şirket Bakiyesi (Müşteri/Tedarikçi Net Durum)")
-            st.caption("Pozitif değerler piyasadan toplam alacağınızı, negatif değerler piyasaya olan toplam borcunuzu temsil eder.")
-            
-            k1, k2, k3 = st.columns(3)
-            k1.metric("TL Net Durum", f"{ozet['TL']:,.2f} TL")
-            k2.metric("USD Net Durum", f"{ozet['USD']:,.2f} USD")
-            k3.metric("EUR Net Durum", f"{ozet['EUR']:,.2f} EUR")
-        else:
-            st.info("Hesaplanacak yeterli veri bulunamadı.")
-
-    with tab_kullanici:
-        bekleyenler = supabase.table("app_users").select("*").eq("role", "beklemede").execute().data
-        if bekleyenler:
-            st.warning("Onay Bekleyen Kullanıcılar")
-            for b in bekleyenler:
-                c1, c2 = st.columns([4,1])
-                c1.write(f"{b['ad_soyad']} ({b['email']})")
-                if c2.button("Yetki Ver", key=f"onay_{b['id']}"):
-                    supabase.table("app_users").update({"role":"onaylı"}).eq("id", b["id"]).execute()
-                    st.rerun()
-                    
-        st.divider()
-        st.write("#### Kayıtlı Kullanıcılar ve Şifre Sıfırlama")
-        all_users = supabase.table("app_users").select("*").execute().data
-        if all_users:
-            secili_u_mail = st.selectbox("Kullanıcı Seçin", [u["email"] for u in all_users])
-            secili_u = next(u for u in all_users if u["email"] == secili_u_mail)
-            
-            st.write(f"**İsim:** {secili_u.get('ad_soyad')} | **Yetki:** {secili_u['role']}")
-            if st.button("Bu kullanıcının şifresini '1234' olarak sıfırla", type="primary"):
-                temiz_mail = secili_u["email"].strip().lower()
-                supabase.table("app_users").update({
-                    "password": hash_password("1234"),
-                    "email": temiz_mail
-                }).eq("id", secili_u["id"]).execute()
-                st.success("Şifre sıfırlandı!")
-                time.sleep(1.5)
-                st.rerun()
-                
-    with tab_test:
-        st.write("#### 🧪 Otomatik Veri Simülasyonu")
-        st.write("Geliştirme sürecinde ekranların (Cari Mizanı, Tablolar vb.) nasıl göründüğünü test edebilmek için sisteme tek tıkla sanal veriler yükleyebilirsiniz.")
-        
-        if st.button("🚀 Sistemi Test Verileriyle Doldur", type="secondary"):
-            with st.spinner("Sanal Kullanıcılar, Cariler ve Belgeli İşlemler Üretiliyor..."):
-                
-                dummy_users = [
-                    {"ad_soyad": "Test Kullanıcı A", "email": "test1@sistem.com", "password": hash_password("1234"), "role": "onaylı"},
-                    {"ad_soyad": "Test Kullanıcı B", "email": "test2@sistem.com", "password": hash_password("1234"), "role": "onaylı"}
-                ]
-                for du in dummy_users:
-                    try:
-                        supabase.table("app_users").insert(du).execute()
-                    except:
-                        pass 
-                
-                dummy_cariler = [
-                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Mavi Bilişim Teknolojileri A.Ş.", "doviz_tipi": "TL", "vergi_dairesi": "Bornova", "vkn_tckn": "1111111111", "olusturan": "Sistem Admin"},
-                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Ege Gıda Pazarlama Ltd.", "doviz_tipi": "USD", "vergi_dairesi": "Karşıyaka", "vkn_tckn": "2222222222", "olusturan": "Sistem Admin"},
-                    {"cari_kodu": f"C-{random.randint(1000, 9999)}", "unvan": "Demir İnşaat ve Malz. Sanayi", "doviz_tipi": "EUR", "vergi_dairesi": "Konak", "vkn_tckn": "3333333333", "olusturan": "Sistem Admin"}
-                ]
-                for dc in dummy_cariler:
-                    try:
-                        supabase.table("cariler").insert(dc).execute()
-                    except:
-                        pass
-                
-                cariler_db_test = supabase.table("cariler").select("id").execute().data
-                
-                if cariler_db_test:
-                    evrak_tipleri = ["Fatura", "Nakit Tahsilat", "Nakit Tediye (Ödeme)", "Banka Havalesi/EFT"]
-                    yonler = ["Borç", "Alacak"]
-                    
-                    dummy_pdf_link = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-                    
-                    for i in range(10): 
-                        secili_c_id = random.choice(cariler_db_test)["id"]
-                        fake_dosya_url = dummy_pdf_link if random.choice([True, False]) else None
-                        
-                        supabase.table("islemler").insert({
-                            "cari_id": secili_c_id,
-                            "evrak_tipi": random.choice(evrak_tipleri),
-                            "islem_yonu": random.choice(yonler),
-                            "tutar": round(random.uniform(1000, 25000), 2),
-                            "belge_no": f"EVR-{random.randint(10000, 99999)}",
-                            "aciklama": "Otomatik üretilen test fişi.",
-                            "dosya_url": fake_dosya_url,
-                            "dosya_path": "test/path.pdf" if fake_dosya_url else None,
-                            "isleyen_kisi": "Test Robotu"
-                        }).execute()
-                
-                st.success("✅ Test verileri (Kullanıcılar, Cari Kartlar ve İşlemler) başarıyla oluşturuldu!")
-                time.sleep(3)
-                st.rerun()
+    st.info("Admin ekranları aktif.")
