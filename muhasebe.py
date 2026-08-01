@@ -353,6 +353,7 @@ elif secili_menu == "Cari Hareketler & Fişler":
                     "Alacak": f"{satir_alacak:,.2f}",
                     "Bakiye": f"{bakiye:,.2f}",
                     "Açıklama": islem.get("aciklama", ""),
+                    "Belge": islem.get("dosya_url") if islem.get("dosya_url") else None,
                     "İşleyen": islem["isleyen_kisi"]
                 })
             
@@ -394,7 +395,20 @@ elif secili_menu == "Cari Hareketler & Fişler":
             st.write("#### Hareket Dökümü")
             if ekstre_listesi:
                 ekstre_listesi.reverse()
-                st.dataframe(pd.DataFrame(ekstre_listesi), use_container_width=True, hide_index=True)
+                df_ekstre = pd.DataFrame(ekstre_listesi)
+                
+                st.dataframe(
+                    df_ekstre, 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Belge": st.column_config.LinkColumn(
+                            "Belge / Dekont",
+                            help="İşleme ait yüklenen belge veya dosyayı açar",
+                            display_text="Dosyayı Aç 🔗"
+                        )
+                    }
+                )
                 
                 with st.expander("✏️ Seçili İşlemi Revize Et veya Sil"):
                     st.info("Aşağıdan bir işlem seçerek tutar veya açıklama gibi detaylarını güncelleyebilirsiniz.")
@@ -580,7 +594,7 @@ elif secili_menu == "Yönetim Paneli (Admin)":
                     except:
                         pass
                 
-                # 4. Veritabanından ID'leri çekerek akıllı ve entegre işlemler üretelim (Belge detayları eklendi)
+                # 4. Veritabanından ID'leri çekerek akıllı ve entegre işlemler üretelim
                 cariler_db_test = supabase.table("cariler").select("id, doviz_tipi").execute().data
                 kasalar_db_test = supabase.table("kasalar").select("id, doviz_tipi").execute().data
                 
